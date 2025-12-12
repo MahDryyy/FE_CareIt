@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import TarifRumahSakit from "./tarif-rumah-sakit";
 import Image from "next/image";
 import Sidebar from "./sidebar";
@@ -12,11 +12,28 @@ import Fornas from "./fornas";
 
 interface DashboardProps {
   onLogout?: () => void;
+  onEditBilling?: (billingId: number) => void;
 }
 
-const Dashboard = ({ onLogout }: DashboardProps) => {
+const Dashboard = ({ onLogout, onEditBilling }: DashboardProps) => {
   const [activeMenu, setActiveMenu] = useState("Home");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [namaDokter, setNamaDokter] = useState("Dokter");
+
+  // Get dokter name from localStorage
+  useEffect(() => {
+    const dokterData = localStorage.getItem("dokter");
+    if (dokterData) {
+      try {
+        const dokter = JSON.parse(dokterData);
+        if (dokter.nama) {
+          setNamaDokter(dokter.nama);
+        }
+      } catch (err) {
+        console.error("Error parsing dokter data:", err);
+      }
+    }
+  }, []);
 
   const handleLogout = () => {
     // Clear authentication
@@ -34,7 +51,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
     { name: "Billing Pasien", icon: "📊" },
     { name: "Riwayat Billing Pasien", icon: "🕒" },
     { name: "Buku Saku", icon: "📚" },
-    { name: "FORNAS", icon: "⚙️" },
+    { name: "Fornas", icon: "⚙️" },
   ];
 
   const warningItems = [
@@ -54,11 +71,11 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
 
 
   return (
-    <div className="flex min-h-screen bg-[#F5FAFD]">
+    <div className="flex min-h-screen bg-[#F5FAFD] overflow-x-hidden w-full">
       {/* Hamburger Menu Button - Mobile Only */}
       <button
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden bg-[#2591D0] text-white p-2 rounded-lg shadow-lg hover:bg-[#1e7ba8] transition-colors"
+        className="fixed top-safe left-4 z-50 lg:hidden bg-[#2591D0] text-white p-2.5 sm:p-3 rounded-lg shadow-lg hover:bg-[#1e7ba8] transition-colors"
         aria-label="Toggle sidebar"
       >
         <svg
@@ -91,19 +108,23 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
         setIsSidebarOpen={setIsSidebarOpen}
         activeMenu={activeMenu}
         setActiveMenu={setActiveMenu}
-        menuItems={menuItems}
       />
 
       {/* Main Content */}
-      <div className="flex-1 w-full px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+      <div className="flex-1 w-full max-w-full px-3 sm:px-4 md:px-6 py-4 sm:py-6 overflow-x-hidden">
         {/* Render content based on active menu */}
 
           {activeMenu === "Tarif Rumah Sakit" && <TarifRumahSakit />}
           {activeMenu === "Tarif BPJS" && <TarifBPJS />}
           {activeMenu === "Billing Pasien" && <BillingPasien />}
-          {activeMenu === "Riwayat Billing Pasien" && <RiwayatBillingPasien />}
+          {activeMenu === "Riwayat Billing Pasien" && (
+            <RiwayatBillingPasien 
+              userRole={localStorage.getItem("userRole") === "admin" ? "admin" : "dokter"} 
+              onEdit={onEditBilling} 
+            />
+          )}
           {activeMenu === "Buku Saku" && <BukuSaku />}
-          {activeMenu === "FORNAS" && <Fornas />}
+          {activeMenu === "Fornas" && <Fornas />}
            {activeMenu === "Home" && (
     <>
       
@@ -118,32 +139,34 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
  {/* DATE + LOGOUT */}
 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2 sm:gap-0">
   <p className="text-blue-500 text-xs sm:text-sm">
-    Senin, 8 Desember 2025
+    {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
   </p>
 </div>
 
-{/* Fixed Logout Button - Top Right */}
-<button
-  onClick={handleLogout}
-  className="fixed top-4 right-4 z-50 flex items-center space-x-1 sm:space-x-2 bg-white sm:bg-transparent px-2 sm:px-0 py-2 sm:py-0 rounded-lg sm:rounded-none shadow-lg sm:shadow-none text-blue-500 hover:text-red-500 transition"
-  aria-label="Logout"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5 sm:h-5 sm:w-5"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={2}
+{/* Fixed Logout Button - Top Right - Only show on Home page */}
+{activeMenu === "Home" && (
+  <button
+    onClick={handleLogout}
+    className="fixed top-4 right-4 z-50 flex items-center space-x-1 sm:space-x-2 bg-white sm:bg-transparent px-2 sm:px-0 py-1.5 sm:py-0 rounded-lg sm:rounded-none shadow-md sm:shadow-none text-blue-500 hover:text-red-500 transition text-xs sm:text-sm font-medium"
+    title="Logout"
   >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h5a2 2 0 012 2v1"
-    />
-  </svg>
-  <span className="hidden sm:inline text-xs sm:text-sm font-medium">Logout</span>
-</button>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-5 w-5 sm:h-5 sm:w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h5a2 2 0 012 2v1"
+      />
+    </svg>
+    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Logout</span>
+  </button>
+)}
 
 
   {/* MAIN CARD */}
@@ -169,7 +192,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
       {/* TEXT CENTER */}
       <div className="text-center sm:text-left max-w-lg flex-1">
         <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-2 sm:mb-3">
-          Halo, Dr. Eko Sulistijono, Sp.A
+          Halo, {namaDokter}
         </h2>
 
         <p className="text-xs sm:text-sm md:text-base text-blue-50 leading-relaxed">
@@ -195,7 +218,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
 </div>
 
               {/* Warning Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
                 <div>
                   <h4 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">
                     Warning Billing Sign
@@ -207,7 +230,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
       className="bg-[#EAF6FF] rounded-lg sm:rounded-xl p-3 sm:p-4 md:p-6 flex items-center space-x-3 sm:space-x-4"
     >
       {/* ICON IMAGE */}
-      <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 flex items-center justify-center flex-shrink-0">
+      <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0">
         <Image
           src={warning.icon}
           alt="warning icon"

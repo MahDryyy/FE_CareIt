@@ -1,166 +1,117 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getTarifRumahSakit, TarifData } from "@/lib/api";
+import { getTarifRumahSakit, type TarifData } from "@/lib/api";
+
+type FilterType = "Semua" | "Rawat Darurat" | "Rawat Inap" | "Rawat Jalan";
 
 const TarifRumahSakit = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeFilter, setActiveFilter] = useState("Semua");
-  const [tarifData, setTarifData] = useState<TarifData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const filterButtons = [
-    "Semua",
-    "RAWAT DARURAT",
-    "RAWAT JALAN",
-    "RAWAT INAP",
-    "OPERASI",
-    "RADIOLOGI",
-    "PEMULASARAAN JENAZAH",
-  ];
-
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<FilterType>("Semua");
+  
+  // Data states
   const [allData, setAllData] = useState<TarifData[]>([]);
-  const [dataFetched, setDataFetched] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<
-    "online" | "offline" | "checking"
-  >("checking");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Fetch data from API only once
+  // Fetch data from backend
   useEffect(() => {
-    const fetchTarifData = async () => {
-      if (dataFetched) return; // Prevent multiple calls
-
+    const fetchData = async () => {
       try {
         setLoading(true);
+        setError("");
+
         const response = await getTarifRumahSakit({});
-
         if (response.error) {
-          throw new Error(response.error);
+          setError(response.error);
+          return;
         }
-
-        setAllData(response.data || []);
-        setDataFetched(true);
-        setConnectionStatus("online");
-        setError(null);
+        if (response.data) {
+          setAllData(response.data);
+        }
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Terjadi kesalahan saat mengambil data"
-        );
-        console.error("Error fetching tarif data:", err);
-        setConnectionStatus("offline");
+        setError("Gagal memuat data tarif rumah sakit. Pastikan backend server berjalan.");
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTarifData();
-  }, []); // Empty dependency array - only run once
+    fetchData();
+  }, []);
 
-  // Filter data locally when search or filter changes
-  useEffect(() => {
-    if (!dataFetched) return;
-
+  // Filter data based on search and filter type
+  const getFilteredData = () => {
     let filtered = [...allData];
 
+    // Apply category filter
+    if (filterType !== "Semua") {
+      filtered = filtered.filter((item) => {
+        const kategori = item.Kategori || "";
+        if (filterType === "Rawat Darurat") {
+          return kategori.toLowerCase().includes("darurat");
+        } else if (filterType === "Rawat Inap") {
+          return kategori.toLowerCase().includes("inap");
+        } else if (filterType === "Rawat Jalan") {
+          return kategori.toLowerCase().includes("jalan");
+        }
+        return true;
+      });
+    }
+
     // Apply search filter
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase();
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
       filtered = filtered.filter(
         (item) =>
-          item.KodeRS.toLowerCase().includes(searchLower) ||
-          item.Deskripsi.toLowerCase().includes(searchLower)
+          item.KodeRS?.toLowerCase().includes(searchLower) ||
+          item.Deskripsi?.toLowerCase().includes(searchLower)
       );
     }
 
-    // Apply category filter
-    if (activeFilter && activeFilter !== "Semua") {
-      filtered = filtered.filter((item) => item.Kategori === activeFilter);
-    }
+    return filtered;
+  };
 
-    setTarifData(filtered);
-  }, [allData, searchTerm, activeFilter, dataFetched]);
+  const filteredData = getFilteredData();
 
-  // Data sudah difilter di API, jadi langsung gunakan tarifData
-  const filteredData = tarifData;
+  // Format currency
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(value);
+  };
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 -mx-3 sm:-mx-4 md:-mx-6 -mt-3 sm:-mt-4 md:-mt-6 px-3 sm:px-4 md:px-6 py-3 sm:py-4 mb-4 sm:mb-6">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-          <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">
-            Tarif Rumah Sakit
-          </h2>
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-3 md:space-x-4">
-            {/* Simple Connection Status */}
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              <div
-                className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${
-                  connectionStatus === "online"
-                    ? "bg-green-500"
-                    : connectionStatus === "offline"
-                    ? "bg-red-500"
-                    : "bg-yellow-500 animate-pulse"
-                }`}
-              />
-              <span className="text-xs sm:text-sm text-gray-600">
-                Backend:{" "}
-                {connectionStatus === "online"
-                  ? "Online"
-                  : connectionStatus === "offline"
-                  ? "Offline"
-                  : "Checking"}
-              </span>
-            </div>
-            <div className="text-xs sm:text-sm text-blue-500">
-              Senin, 8 Desember 2025
-              <span className="ml-1 sm:ml-2">📅</span>
-            </div>
-          </div>
-        </div>
+    <div className="p-3 sm:p-4 md:p-6 bg-white min-h-screen">
+      {/* Tanggal */}
+      <div className="text-xs sm:text-sm text-[#2591D0] mb-2 sm:mb-3">
+        {new Date().toLocaleDateString("id-ID", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-4 sm:mb-6">
-        <div className="relative w-full sm:max-w-md">
-          <input
-            type="text"
-            placeholder="Cari tindakan disini"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-3 sm:pl-4 pr-8 sm:pr-10 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm md:text-base text-[#2591D0]"
-          />
-          <div className="absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3">
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 text-[#2591D0]"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+          {error}
         </div>
-      </div>
+      )}
 
-      {/* Filter Buttons */}
-      <div className="flex flex-wrap gap-1.5 sm:gap-2 md:gap-3 mb-4 sm:mb-6">
-        {filterButtons.map((filter, index) => (
+      {/* Filter Type Selector */}
+      <div className="flex flex-wrap gap-2 sm:gap-3 mb-4 sm:mb-5">
+        {(["Semua", "Rawat Darurat", "Rawat Inap", "Rawat Jalan"] as FilterType[]).map((filter) => (
           <button
-            key={index}
-            onClick={() => setActiveFilter(filter)}
-            className={`px-2 sm:px-3 md:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
-              activeFilter === filter
-                ? "bg-blue-500 text-white shadow-md"
-                : "bg-white text-blue-500 border border-blue-200 hover:bg-blue-50"
+            key={filter}
+            onClick={() => setFilterType(filter)}
+            className={`px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-2.5 rounded-full border transition text-xs sm:text-sm md:text-base font-medium whitespace-nowrap ${
+              filterType === filter
+                ? "bg-blue-500 text-white border-blue-500 shadow-md"
+                : "text-[#2591D0] border-blue-300 bg-white hover:bg-blue-50"
             }`}
           >
             {filter}
@@ -168,115 +119,18 @@ const TarifRumahSakit = () => {
         ))}
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="bg-white rounded-lg shadow-sm p-6 sm:p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-blue-500 mx-auto mb-3 sm:mb-4"></div>
-          <p className="text-sm sm:text-base text-[#2591D0]">Memuat data...</p>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-          <div className="flex items-center">
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 mr-2 sm:mr-3 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <p className="text-xs sm:text-sm text-red-700">Error: {error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Table */}
-      {!loading && !error && (
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          {/* Desktop Table Header */}
-          <div className="hidden sm:grid sm:grid-cols-4 gap-2 sm:gap-4 p-3 sm:p-4 bg-gray-50 border-b border-gray-200">
-            <div className="font-semibold text-gray-700 text-xs sm:text-sm">Kode RS</div>
-            <div className="font-semibold text-gray-700 text-xs sm:text-sm col-span-2">
-              Deskripsi
-            </div>
-            <div className="font-semibold text-gray-700 text-xs sm:text-sm text-right">
-              Harga (Rp)
-            </div>
-          </div>
-
-          {/* Table Body */}
-          <div className="divide-y divide-gray-200">
-            {filteredData.map((item, index) => (
-              <div key={index}>
-                {/* Desktop Row */}
-                <div className="hidden sm:grid sm:grid-cols-4 gap-2 sm:gap-4 p-3 sm:p-4 hover:bg-gray-50 transition-colors">
-                  <div className="text-blue-600 font-medium text-xs sm:text-sm">
-                    {item.KodeRS}
-                  </div>
-                  <div className="text-blue-600 text-xs sm:text-sm col-span-2">
-                    {item.Deskripsi}
-                  </div>
-                  <div className="text-gray-900 font-medium text-xs sm:text-sm text-right">
-                    {new Intl.NumberFormat("id-ID").format(item.Harga)}
-                  </div>
-                </div>
-
-                {/* Mobile Card */}
-                <div className="sm:hidden p-3 sm:p-4 hover:bg-gray-50 transition-colors">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-start">
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Kode RS
-                      </span>
-                      <span className="text-blue-600 font-medium text-xs sm:text-sm">
-                        {item.KodeRS}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">
-                        Deskripsi
-                      </span>
-                      <span className="text-blue-600 text-xs sm:text-sm">
-                        {item.Deskripsi}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">
-                        Kategori
-                      </span>
-                      <span className="text-gray-600 text-xs px-2 py-1 bg-gray-100 rounded">
-                        {item.Kategori}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Harga
-                      </span>
-                      <span className="text-gray-900 font-semibold text-xs sm:text-sm">
-                        Rp {new Intl.NumberFormat("id-ID").format(item.Harga)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && !error && filteredData.length === 0 && (
-        <div className="text-center py-6 sm:py-8 text-gray-500">
+      {/* Search */}
+      <div className="relative mb-3 sm:mb-4">
+        <input
+          type="text"
+          placeholder="Cari tindakan disini"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full border border-blue-200 rounded-lg py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-sm sm:text-base text-blue-400 focus:ring-2 focus:ring-blue-400"
+        />
+        <div className="absolute right-2 sm:right-3 top-2 sm:top-3.5 text-blue-400">
           <svg
-            className="w-8 h-8 sm:w-12 sm:h-12 text-gray-300 mx-auto mb-3 sm:mb-4"
+            className="w-4 h-4 sm:w-5 sm:h-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -285,12 +139,134 @@ const TarifRumahSakit = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
           </svg>
-          <p className="text-sm sm:text-base">Tidak ada data yang ditemukan</p>
         </div>
-      )}
+      </div>
+
+      {/* Table - Desktop View */}
+      <div className="hidden md:block border border-blue-200 rounded-lg md:rounded-xl overflow-hidden shadow-sm overflow-x-auto">
+        <div className="min-w-full">
+          {/* Header */}
+          <div className="grid grid-cols-6 bg-blue-50 border-b border-blue-200 px-3 md:px-4 lg:px-6 py-3 md:py-4 text-[#2591D0] font-semibold text-sm md:text-base">
+            <div className="col-span-1">Kode</div>
+            <div className="col-span-4">Tindakan</div>
+            <div className="col-span-1 text-right">Harga</div>
+          </div>
+
+          {/* Loading State */}
+          {loading && (
+            <div className="py-12 md:py-16 text-center text-[#2591D0] text-base md:text-lg">
+              Memuat data...
+            </div>
+          )}
+
+          {/* Rows */}
+          {!loading &&
+            filteredData.map((item, i) => {
+              return (
+                <div
+                  key={i}
+                  className="grid grid-cols-6 px-3 md:px-4 lg:px-6 py-3 md:py-4 text-sm md:text-base border-b border-blue-100 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="col-span-1 text-[#2591D0] font-medium break-words">
+                    {item.KodeRS}
+                  </div>
+                  <div className="col-span-4 text-[#2591D0] break-words pr-2">
+                    {item.Deskripsi}
+                  </div>
+                  <div className="col-span-1 text-right text-[#2591D0] font-medium whitespace-nowrap">
+                    {formatCurrency(item.Harga)}
+                  </div>
+                </div>
+              );
+            })}
+
+          {/* Empty State */}
+          {!loading && filteredData.length === 0 && (
+            <div className="py-8 md:py-12 text-center text-gray-500 text-sm md:text-base">
+              {search
+                ? "Tidak ada data yang sesuai dengan pencarian"
+                : "Tidak ada data ditemukan"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile/Tablet Card View */}
+      <div className="md:hidden space-y-3">
+        {/* Loading State */}
+        {loading && (
+          <div className="py-12 text-center text-[#2591D0] text-base">
+            Memuat data...
+          </div>
+        )}
+
+        {/* Cards */}
+        {!loading &&
+          filteredData.map((item, i) => {
+            return (
+              <div
+                key={i}
+                className="bg-white border border-blue-200 rounded-lg shadow-sm p-3 sm:p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-col space-y-2">
+                  {/* Kode */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Kode
+                    </span>
+                    <span className="text-sm font-semibold text-[#2591D0]">
+                      {item.KodeRS}
+                    </span>
+                  </div>
+
+                  {/* Deskripsi */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Tindakan
+                    </span>
+                    <span className="text-sm text-[#2591D0] break-words">
+                      {item.Deskripsi}
+                    </span>
+                  </div>
+
+                  {/* Kategori */}
+                  {item.Kategori && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Kategori:
+                      </span>
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-[#2591D0] rounded-full">
+                        {item.Kategori}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Harga */}
+                  <div className="flex items-center justify-between pt-2 border-t border-blue-100">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Harga
+                    </span>
+                    <span className="text-base font-bold text-[#2591D0]">
+                      {formatCurrency(item.Harga)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+        {/* Empty State */}
+        {!loading && filteredData.length === 0 && (
+          <div className="py-12 text-center text-gray-500 text-sm bg-white border border-blue-200 rounded-lg">
+            {search
+              ? "Tidak ada data yang sesuai dengan pencarian"
+              : "Tidak ada data ditemukan"}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

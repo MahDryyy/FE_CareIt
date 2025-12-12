@@ -1,55 +1,204 @@
 "use client";
+import { useState, useEffect } from 'react';
 import { FaSearch, FaEdit } from 'react-icons/fa';
+import { getAllBilling } from '@/lib/api';
 
 interface RiwayatBillingPasienProps {
   onLogout?: () => void;
+  userRole?: "dokter" | "admin";
+  onEdit?: (billingId: number) => void;
+  selectedRuangan?: string | null;
 }
 
-const RiwayatBillingPasien = ({ onLogout }: RiwayatBillingPasienProps) => {
-  // Data pasien sesuai gambar
-  const patients = [
-    { id: "P.0001", name: "Suryanto Bin Cahyono", status: "red" },
-    { id: "P.0002", name: "Andra Wicaksono", status: "yellow" },
-    { id: "P.0003", name: "Mamat Alkatiri", status: "red" },
-    { id: "P.0004", name: "Alex Bin Candra", status: "green" },
-    { id: "P.0005", name: "Annisa Cahyani", status: "green" },
-    { id: "P.0006", name: "Karsa Putri Inara", status: "yellow" },
-    { id: "P.0007", name: "Stefani Handayani", status: "yellow" },
-    { id: "P.0008", name: "Maharani Putri", status: "yellow" },
-    { id: "P.0009", name: "Celvin Sanjaya", status: "red" },
-    { id: "P.0010", name: "Andreas Bin Stephen", status: "green" },
-    { id: "P.0011", name: "Michael", status: "red" },
-    { id: "P.0012", name: "Geroge Salahudin", status: "green" },
-    { id: "P.0013", name: "Alexandra Johanes", status: "green" },
-    { id: "P.0014", name: "Amanda Victoria", status: "yellow" },
-  ];
+interface BillingData {
+  ID_Billing?: number;
+  ID_Pasien?: number;
+  Nama_Pasien?: string;
+  Billing_Sign?: string;
+  // Backend sends lowercase field names
+  id_billing?: number;
+  id_pasien?: number;
+  nama_pasien?: string;
+  billing_sign?: string;
+  // Additional fields from backend
+  Kelas?: string;
+  ruangan?: string;
+  total_tarif_rs?: number;
+  total_klaim?: number;
+  // Doctor fields
+  ID_Dokter?: number;
+  id_dokter?: number;
+  nama_dokter?: string;
+  Nama_Dokter?: string;
+  [key: string]: any;
+}
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "red":
-        return "bg-red-500";
-      case "yellow":
-        return "bg-yellow-500";
-      case "green":
-        return "bg-green-500";
-      default:
-        return "bg-gray-500";
+const RiwayatBillingPasien = ({ onLogout, userRole, onEdit, selectedRuangan }: RiwayatBillingPasienProps) => {
+  const [billingData, setBillingData] = useState<BillingData[]>([]);
+  const [filteredData, setFilteredData] = useState<BillingData[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [loggedInDokterId, setLoggedInDokterId] = useState<number | null>(null);
+  const [loggedInDokterName, setLoggedInDokterName] = useState<string>('');
+  const [ruangan, setRuangan] = useState<string>('');
+  const [ruanganSearch, setRuanganSearch] = useState<string>('');
+  const [ruanganDropdownOpen, setRuanganDropdownOpen] = useState<boolean>(false);
+
+  // Get logged in doctor info
+  useEffect(() => {
+    const dokterData = localStorage.getItem("dokter");
+    if (dokterData) {
+      try {
+        const dokter = JSON.parse(dokterData);
+        if (dokter.id) {
+          setLoggedInDokterId(dokter.id);
+        }
+        if (dokter.nama) {
+          setLoggedInDokterName(dokter.nama);
+        }
+      } catch (err) {
+        console.error('Error parsing dokter data:', err);
+      }
+    }
+  }, []);
+
+  // Fetch billing data
+  useEffect(() => {
+    const fetchBillingData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const response = await getAllBilling();
+
+        if (response.error) {
+          setError(response.error);
+          return;
+        }
+
+        // Handle different response structures
+        if (response.data) {
+          let dataArray: BillingData[] = [];
+          
+          // Check if response.data is an array directly
+          if (Array.isArray(response.data)) {
+            dataArray = response.data;
+          } 
+          // Check if response.data has a data property
+          else if (response.data.data && Array.isArray(response.data.data)) {
+            dataArray = response.data.data;
+          }
+          // Check if response.data has a status and data property
+          else if (response.data.status && response.data.data && Array.isArray(response.data.data)) {
+            dataArray = response.data.data;
+          } else {
+            console.error('Unexpected response structure:', response.data);
+            setError('Format data tidak dikenali');
+            return;
+          }
+          
+          // Log untuk debugging
+          console.log('Billing data loaded:', dataArray.length, 'items');
+          if (dataArray.length > 0) {
+            console.log('Sample item:', dataArray[0]);
+          }
+          
+          // Tidak filter berdasarkan dokter - ambil semua data dari database
+          setBillingData(dataArray);
+          setFilteredData(dataArray);
+        } else {
+          console.error('No data in response:', response);
+          setError('Tidak ada data yang diterima dari server');
+        }
+      } catch (err) {
+        setError('Gagal memuat data billing. Pastikan backend server berjalan.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Always fetch data regardless of login status
+    fetchBillingData();
+  }, []);
+
+  // Filter data based on search term and ruangan
+  useEffect(() => {
+    let filtered = billingData;
+
+    // Filter 1: By ruangan (if selectedRuangan provided)
+    if (selectedRuangan) {
+      filtered = filtered.filter((item) => {
+        const itemRuangan = item.ruangan || item.Ruangan || '';
+        return itemRuangan.trim() === selectedRuangan.trim();
+      });
+    }
+
+    // Filter 2: By search term
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(
+        (item) => {
+          const namaPasien = item.Nama_Pasien || item.nama_pasien || '';
+          const idPasien = item.ID_Pasien || item.id_pasien || 0;
+          const idBilling = item.ID_Billing || item.id_billing || 0;
+          return (
+            namaPasien.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+            idPasien.toString().includes(searchTerm) ||
+            idBilling.toString().includes(searchTerm)
+          );
+        }
+      );
+    }
+    
+    setFilteredData(filtered);
+  }, [searchTerm, billingData, selectedRuangan]);
+
+  const getStatusColor = (billingSign: string) => {
+    // Map billing sign to color
+    if (!billingSign) return "bg-gray-400";
+    
+    const sign = billingSign.toLowerCase();
+    
+    // Map Indonesian enum values from database
+    if (sign === "hijau" || sign === "green") {
+      return "bg-green-500"; // Tarif RS <=25% dari BPJS
+    } else if (sign === "kuning" || sign === "yellow") {
+      return "bg-yellow-500"; // 26%-50%
+    } else if (sign === "merah" || sign === "red" || sign === "orange") {
+      return "bg-red-500"; // >50%
+    }
+    
+    // Legacy mappings (for backward compatibility)
+    if (sign === "selesai" || sign === "completed" || sign === "1") {
+      return "bg-green-500";
+    } else if (sign === "pending" || sign === "proses" || sign === "0") {
+      return "bg-yellow-500";
+    } else {
+      return "bg-gray-400";
     }
   };
+
+  const handleSelectRuangan = (idRuangan: string, namaRuangan: string) => {
+    setRuangan(namaRuangan);  // ✅ SIMPAN NAMA RUANGAN!
+    setRuanganSearch(namaRuangan);
+    setRuanganDropdownOpen(false);
+};
 
   return (
     <div className="p-3 sm:p-4 md:p-6 bg-white min-h-screen">
       {/* Tanggal */}
       <div className="mb-2 sm:mb-3">
-        <div className="text-xs sm:text-sm text-[#2591D0]">Senin, 8 Desember 2025</div>
+        <div className="text-xs sm:text-sm text-[#2591D0]">
+          {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
       </div>
 
       {/* Fixed Logout Button - Top Right */}
       {onLogout && (
         <button
           onClick={onLogout}
-          className="fixed top-4 right-4 z-50 flex items-center space-x-1 sm:space-x-2 bg-white sm:bg-transparent px-2 sm:px-0 py-2 sm:py-0 rounded-lg sm:rounded-none shadow-lg sm:shadow-none text-blue-500 hover:text-red-500 transition"
-          aria-label="Logout"
+          className="fixed top-4 right-4 z-50 flex items-center space-x-1 sm:space-x-2 bg-white sm:bg-transparent px-2 sm:px-0 py-1.5 sm:py-0 rounded-lg sm:rounded-none shadow-md sm:shadow-none text-blue-500 hover:text-red-500 transition text-xs sm:text-sm font-medium"
+          title="Logout"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -69,62 +218,192 @@ const RiwayatBillingPasien = ({ onLogout }: RiwayatBillingPasienProps) => {
         </button>
       )}
 
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
+
       {/* Search Bar */}
       <div className="mb-4 sm:mb-6">
         <div className="relative">
           <input
             type="text"
             placeholder="Cari billing pasien disini"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
           />
           <FaSearch className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-[#2591D0] cursor-pointer text-sm sm:text-base" />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="border border-blue-200 rounded-lg sm:rounded-xl overflow-hidden overflow-x-auto">
-        <table className="w-full min-w-[600px]">
+      {/* Table - Desktop View */}
+      <div className="hidden md:block border border-blue-200 rounded-lg md:rounded-xl overflow-hidden overflow-x-auto">
+        <table className="w-full min-w-full">
           <thead>
             <tr className="bg-[#87CEEB]">
-              <th className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs sm:text-sm font-bold text-white">
+              <th className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-left text-sm md:text-base font-bold text-white">
                 ID Pasien
               </th>
-              <th className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs sm:text-sm font-bold text-white">
+              <th className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-left text-sm md:text-base font-bold text-white">
                 Nama
               </th>
-              <th className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 text-left text-xs sm:text-sm font-bold text-white">
+              <th className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-left text-sm md:text-base font-bold text-white">
+                Dokter
+              </th>
+              <th className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-left text-sm md:text-base font-bold text-white">
                 Billing Sign
               </th>
             </tr>
           </thead>
           <tbody>
-            {patients.map((patient, index) => (
-              <tr
-                key={patient.id}
-                className={`${
-                  index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                } hover:bg-blue-50 transition-colors`}
-              >
-                <td className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 text-xs sm:text-sm text-[#2591D0]">
-                  {patient.id}
-                </td>
-                <td className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 text-xs sm:text-sm text-[#2591D0]">
-                  {patient.name}
-                </td>
-                <td className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <span
-                      className={`${getStatusColor(
-                        patient.status
-                      )} w-12 sm:w-16 md:w-20 h-4 sm:h-5 md:h-6 rounded-full`}
-                    ></span>
-                    <FaEdit className="text-[#2591D0] cursor-pointer hover:text-[#1e7ba8] text-sm sm:text-base" />
-                  </div>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-4 md:px-6 lg:px-8 py-12 text-center text-[#2591D0] text-base md:text-lg">
+                  Memuat data...
                 </td>
               </tr>
-            ))}
+            ) : filteredData.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 md:px-6 lg:px-8 py-12 text-center text-[#2591D0] text-base md:text-lg">
+                  {searchTerm ? 'Tidak ada data yang sesuai dengan pencarian' : 'Tidak ada data billing'}
+                </td>
+              </tr>
+            ) : (
+              filteredData.map((item, index) => {
+                // Support both PascalCase and lowercase field names from backend
+                const idBilling = item.ID_Billing || item.id_billing || 0;
+                const idPasien = item.ID_Pasien || item.id_pasien || 0;
+                const namaPasien = item.Nama_Pasien || item.nama_pasien || 'N/A';
+                const billingSign = item.Billing_Sign || item.billing_sign || '';
+                // Get doctor name from backend response - bisa kosong jika belum ada di database
+                const namaDokter = item.Nama_Dokter || item.nama_dokter || '';
+                
+                return (
+                  <tr
+                    key={idBilling || index}
+                    className={`${
+                      index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                    } hover:bg-blue-50 transition-colors`}
+                  >
+                    <td className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-sm md:text-base text-[#2591D0]">
+                      P.{idPasien.toString().padStart(4, '0')}
+                    </td>
+                    <td className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-sm md:text-base text-[#2591D0] break-words">
+                      {namaPasien}
+                    </td>
+                    <td className="px-4 md:px-6 lg:px-8 py-3 md:py-4 text-sm md:text-base text-[#2591D0] break-words">
+                      {namaDokter || '-'}
+                    </td>
+                    <td className="px-4 md:px-6 lg:px-8 py-3 md:py-4">
+                      <div className="flex items-center gap-3 md:gap-4 justify-between">
+                        <span
+                          className={`${getStatusColor(
+                            billingSign
+                          )} w-16 md:w-20 lg:w-24 h-5 md:h-6 lg:h-7 rounded-full flex-shrink-0`}
+                        ></span>
+                        {userRole === "admin" && (
+                          <FaEdit 
+                            onClick={() => {
+                              if (onEdit && idBilling) {
+                                onEdit(idBilling);
+                              }
+                            }}
+                            className="text-[#2591D0] cursor-pointer hover:text-[#1e7ba8] text-base md:text-lg flex-shrink-0 ml-auto" 
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile/Tablet Card View */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="py-12 text-center text-[#2591D0] text-base">
+            Memuat data...
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="py-12 text-center text-[#2591D0] text-base bg-white border border-blue-200 rounded-lg">
+            {searchTerm ? 'Tidak ada data yang sesuai dengan pencarian' : 'Tidak ada data billing'}
+          </div>
+        ) : (
+          filteredData.map((item, index) => {
+            const idBilling = item.ID_Billing || item.id_billing || 0;
+            const idPasien = item.ID_Pasien || item.id_pasien || 0;
+            const namaPasien = item.Nama_Pasien || item.nama_pasien || 'N/A';
+            const billingSign = item.Billing_Sign || item.billing_sign || '';
+            const namaDokter = item.Nama_Dokter || item.nama_dokter || '';
+            
+            return (
+              <div
+                key={idBilling || index}
+                className="bg-white border border-blue-200 rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="space-y-3">
+                  {/* ID Pasien */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      ID Pasien
+                    </span>
+                    <span className="text-sm font-semibold text-[#2591D0]">
+                      P.{idPasien.toString().padStart(4, '0')}
+                    </span>
+                  </div>
+
+                  {/* Nama */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Nama
+                    </span>
+                    <span className="text-sm text-[#2591D0] break-words">
+                      {namaPasien}
+                    </span>
+                  </div>
+
+                  {/* Dokter */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Dokter
+                    </span>
+                    <span className="text-sm text-[#2591D0] break-words">
+                      {namaDokter || '-'}
+                    </span>
+                  </div>
+
+                  {/* Billing Sign */}
+                  <div className="flex items-center justify-between pt-2 border-t border-blue-100">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Billing Sign
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`${getStatusColor(billingSign)} w-16 h-5 rounded-full flex-shrink-0`}
+                      ></span>
+                      {userRole === "admin" && (
+                        <FaEdit 
+                          onClick={() => {
+                            if (onEdit && idBilling) {
+                              onEdit(idBilling);
+                            }
+                          }}
+                          className="text-[#2591D0] cursor-pointer hover:text-[#1e7ba8] text-lg flex-shrink-0" 
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

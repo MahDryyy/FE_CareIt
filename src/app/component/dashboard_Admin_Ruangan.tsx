@@ -1,26 +1,86 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { FaSearch, FaExternalLinkAlt, FaEdit } from 'react-icons/fa';
 import RiwayatBillingPasien from "./riwayat-billing-pasien";
+import { getAllBilling } from "@/lib/api";
 
 interface DashboardAdminProps {
   onLogout?: () => void;
+  onEditBilling?: (billingId: number) => void;
 }
 
-const DashboardAdmin = ({ onLogout }: DashboardAdminProps) => {
-  const [activeRuangan, setActiveRuangan] = useState("Ruangan 1");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+interface BillingData {
+  ID_Billing?: number;
+  ID_Pasien?: number;
+  Nama_pasien?: string;
+  ruangan?: string;
+  Ruangan?: string;
+  [key: string]: any;
+}
 
-  const ruanganItems = [
-    "Ruangan 1",
-    "Ruangan 2",
-    "Ruangan 3",
-    "Ruangan 4",
-    "Ruangan 5",
-    "Ruangan 6",
-    "Ruangan 7",
-  ];
+const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
+  const [activeRuangan, setActiveRuangan] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [ruanganItems, setRuanganItems] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Fetch ruangan dari billing/pasien data
+  useEffect(() => {
+    const fetchRuangan = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        
+        const response = await getAllBilling();
+        
+        if (response.error) {
+          setError(response.error);
+          setRuanganItems([]);
+          return;
+        }
+
+        // Extract data dari response - bisa response.data atau response.data.data
+        const billingArray = response.data?.data || response.data;
+        
+        if (billingArray && Array.isArray(billingArray)) {
+          // Extract unique ruangan dari billing data
+          const ruanganSet = new Set<string>();
+          billingArray.forEach((item: BillingData) => {
+            const ruangan = item.ruangan || item.Ruangan;
+            if (ruangan && typeof ruangan === "string" && ruangan.trim()) {
+              ruanganSet.add(ruangan.trim());
+            }
+          });
+
+          // Convert Set to sorted Array
+          const uniqueRuangan = Array.from(ruanganSet).sort();
+          setRuanganItems(uniqueRuangan);
+
+          // Set active ruangan ke yang pertama jika ada
+          if (uniqueRuangan.length > 0) {
+            setActiveRuangan(uniqueRuangan[0]);
+          }
+        } else {
+          setRuanganItems([]);
+          setActiveRuangan(null);
+        }
+      } catch (err) {
+        console.error("Error fetching ruangan:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Gagal mengambil data ruangan"
+        );
+        setRuanganItems([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRuangan();
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("isAuthenticated");
@@ -74,7 +134,7 @@ const DashboardAdmin = ({ onLogout }: DashboardAdminProps) => {
       <div
         className={`
           fixed top-0 left-0
-          w-56 sm:w-64 h-screen
+          w-56 sm:w-60 md:w-64 h-screen
           bg-[#ECF6FB] rounded-r-2xl sm:rounded-r-3xl shadow-lg
           transition-transform duration-300 z-50
           overflow-y-auto
@@ -96,36 +156,56 @@ const DashboardAdmin = ({ onLogout }: DashboardAdminProps) => {
 
         {/* Navigation Menu */}
         <nav className="mt-4 sm:mt-6 space-y-1 px-2 sm:px-4">
-          {ruanganItems.map((ruangan, index) => {
-            const isActive = activeRuangan === ruangan;
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#2591D0]"></div>
+              <span className="ml-2 text-xs text-gray-500">Loading...</span>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-600">
+              {error}
+            </div>
+          ) : ruanganItems.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-xs text-gray-500">Tidak ada data ruangan</p>
+            </div>
+          ) : (
+            ruanganItems.map((ruangan, index) => {
+              const isActive = activeRuangan === ruangan;
 
-            return (
-              <button
-                key={index}
-                onClick={() => {
-                  setActiveRuangan(ruangan);
-                  setIsSidebarOpen(false);
-                }}
-                className={`
-                  w-full flex items-center py-2 sm:py-3 px-2 sm:px-4
-                  rounded-lg text-left transition-all
-                  ${
-                    isActive
-                      ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
-                      : "text-gray-400 hover:bg-white hover:text-gray-600"
-                  }
-                `}
-              >
-                <span className="text-xs sm:text-sm">{ruangan}</span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setActiveRuangan(ruangan);
+                    setIsSidebarOpen(false);
+                  }}
+                  className={`
+                    w-full flex items-center py-2 sm:py-3 px-2 sm:px-4
+                    rounded-lg text-left transition-all
+                    ${
+                      isActive
+                        ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
+                        : "text-gray-400 hover:bg-white hover:text-gray-600"
+                    }
+                  `}
+                >
+                  <span className="text-xs sm:text-sm">{ruangan}</span>
+                </button>
+              );
+            })
+          )}
         </nav>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 w-full lg:w-auto lg:ml-0">
-        <RiwayatBillingPasien onLogout={handleLogout} />
+        <RiwayatBillingPasien 
+          onLogout={handleLogout} 
+          userRole="admin" 
+          onEdit={onEditBilling}
+          selectedRuangan={activeRuangan}
+        />
       </div>
     </div>
   );

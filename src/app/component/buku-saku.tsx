@@ -7,7 +7,7 @@ const BukuSaku = () => {
         Buku Saku
       </h1>
 
-      <div className="w-full h-[calc(100vh-120px)] sm:h-[calc(100vh-150px)] rounded-lg overflow-hidden border border-blue-200">
+      <div className="w-full h-[calc(100vh-100px)] sm:h-[calc(100vh-120px)] md:h-[calc(100vh-140px)] rounded-lg overflow-hidden border border-blue-200">
         <iframe
           src="/assets/PDF/BUKU SAKU PENGISIAN RESUME MEDIS IKPK REVISI (1).pdf"
           className="w-full h-full"

@@ -1,323 +1,1440 @@
 "use client";
-import { useState,useRef } from 'react';
-import { FaCalendarAlt, FaPlus, FaExternalLinkAlt } from 'react-icons/fa';
+import { useState, useRef, useEffect } from 'react';
+import { FaCalendarAlt, FaPlus, FaTrash, FaSearch, FaChevronDown } from 'react-icons/fa';
+import {
+  getDokter,
+  getRuangan,
+  getICD9,
+  getICD10,
+  getTarifRumahSakit,
+  searchPasien,
+  createBilling,
+  type Dokter,
+  type Ruangan,
+  type ICD9,
+  type ICD10,
+  type TarifData,
+  type BillingRequest,
+} from '@/lib/api';
+
 const BillingPasien = () => {
+  // Form state
+  const [namaPasien, setNamaPasien] = useState('');
+  const [idPasien, setIdPasien] = useState('');
+  const [usia, setUsia] = useState('');
   const [gender, setGender] = useState('Pria');
+  const [ruangan, setRuangan] = useState('');
+  const [kelas, setKelas] = useState('');
+  const [tanggalMasuk, setTanggalMasuk] = useState('');
+  const [tanggalKeluar, setTanggalKeluar] = useState('');
+  const [dpjp, setDpjp] = useState('');
+  const [caraBayar, setCaraBayar] = useState('BPJS');
+  const [totalTarifRS, setTotalTarifRS] = useState(0);
+
+  // Dropdown data
+  const [dokterList, setDokterList] = useState<Dokter[]>([]);
+  const [ruanganList, setRuanganList] = useState<Ruangan[]>([]);
+  const [icd9List, setIcd9List] = useState<ICD9[]>([]);
+  const [icd10List, setIcd10List] = useState<ICD10[]>([]);
+  const [tarifRSList, setTarifRSList] = useState<TarifData[]>([]);
+
+  // Selected items
+  const [selectedTindakan, setSelectedTindakan] = useState<string[]>([]);
+  const [selectedICD9, setSelectedICD9] = useState<string[]>([]);
+  const [selectedICD10, setSelectedICD10] = useState<string[]>([]);
+
+  // Billing history state (untuk menampilkan riwayat tindakan & ICD dari pasien)
+  const [billingHistory, setBillingHistory] = useState<{
+    tindakan_rs: string[];
+    icd9: string[];
+    icd10: string[];
+    inacbg?: string[];
+    total_tarif_rs: number;
+  } | null>(null);
+  const [billingHistoryInfo, setBillingHistoryInfo] = useState('Belum ada data yang dimuat. Pilih pasien untuk melihat riwayat.');
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [searchingPasien, setSearchingPasien] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [nameDropdownOpen, setNameDropdownOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Searchable dropdown state
+  const [tindakanSearch, setTindakanSearch] = useState('');
+  const [tindakanDropdownOpen, setTindakanDropdownOpen] = useState(false);
+  const [tindakanJustClosed, setTindakanJustClosed] = useState(false);
+  const [icd9Search, setIcd9Search] = useState('');
+  const [icd9DropdownOpen, setIcd9DropdownOpen] = useState(false);
+  const [icd9JustClosed, setIcd9JustClosed] = useState(false);
+  const [icd10Search, setIcd10Search] = useState('');
+  const [icd10DropdownOpen, setIcd10DropdownOpen] = useState(false);
+  const [icd10JustClosed, setIcd10JustClosed] = useState(false);
+  const [ruanganSearch, setRuanganSearch] = useState('');
+  const [ruanganDropdownOpen, setRuanganDropdownOpen] = useState(false);
+  const [ruanganJustClosed, setRuanganJustClosed] = useState(false);
+  const [dpjpSearch, setDpjpSearch] = useState('');
+  const [dpjpDropdownOpen, setDpjpDropdownOpen] = useState(false);
+  const [dpjpJustClosed, setDpjpJustClosed] = useState(false);
+
   const dateMasukRef = useRef<HTMLInputElement>(null);
   const dateKeluarRef = useRef<HTMLInputElement>(null);
+  const tindakanInputRef = useRef<HTMLInputElement>(null);
+  const tindakanDropdownRef = useRef<HTMLDivElement>(null);
+  const icd9InputRef = useRef<HTMLInputElement>(null);
+  const icd9DropdownRef = useRef<HTMLDivElement>(null);
+  const icd10InputRef = useRef<HTMLInputElement>(null);
+  const icd10DropdownRef = useRef<HTMLDivElement>(null);
+  const ruanganInputRef = useRef<HTMLInputElement>(null);
+  const ruanganDropdownRef = useRef<HTMLDivElement>(null);
+  const dpjpInputRef = useRef<HTMLInputElement>(null);
+  const dpjpDropdownRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const nameDropdownRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<number | null>(null);
+
+  // Set tanggal masuk otomatis dengan tanggal hari ini
+  useEffect(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+    setTanggalMasuk(todayString);
+  }, []);
+
+  // Set DPJP otomatis dengan dokter yang login setelah dokterList ter-load
+  useEffect(() => {
+    const dokterData = localStorage.getItem("dokter");
+    if (dokterData && dokterList.length > 0) {
+      try {
+        const dokter = JSON.parse(dokterData);
+        if (dokter.id && dokter.nama) {
+          // Cari dokter di dokterList berdasarkan ID
+          const foundDokter = dokterList.find(d => d.ID_Dokter === dokter.id);
+          if (foundDokter) {
+            // Set DPJP dengan ID dokter
+            setDpjp(foundDokter.ID_Dokter.toString());
+            // Set search value dengan nama dokter
+            setDpjpSearch(foundDokter.Nama_Dokter);
+          } else {
+            // Jika tidak ditemukan di list, tetap set dengan data dari localStorage
+            setDpjp(dokter.id.toString());
+            setDpjpSearch(dokter.nama);
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing dokter data:', err);
+      }
+    }
+  }, [dokterList]);
+
+  // Fetch dropdown data on mount - TIDAK ADA AUTO SAVE
+  // HANYA FETCH DATA DROPDOWN, TIDAK MEMANGGIL createBilling ATAU handleSubmit
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        // Hanya fetch data dropdown, TIDAK save apapun
+        const [dokterRes, ruanganRes, icd9Res, icd10Res, tarifRes] = await Promise.all([
+          getDokter(),
+          getRuangan(),
+          getICD9(),
+          getICD10(),
+          getTarifRumahSakit({}),
+        ]);
+
+        if (dokterRes.data) setDokterList(dokterRes.data);
+        if (ruanganRes.data) setRuanganList(ruanganRes.data);
+        if (icd9Res.data) setIcd9List(icd9Res.data);
+        if (icd10Res.data) setIcd10List(icd10Res.data);
+        if (tarifRes.data) setTarifRSList(tarifRes.data);
+      } catch (err) {
+        console.error('Error fetching dropdown data:', err);
+        setError('Gagal memuat data dropdown');
+      }
+    };
+
+    fetchDropdownData();
+    // TIDAK ADA createBilling atau handleSubmit di sini
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      
+      // Check for tindakan dropdown
+      if (tindakanDropdownOpen) {
+        const isClickInsideInput = tindakanInputRef.current?.contains(target);
+        const isClickInsideDropdown = tindakanDropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setTindakanDropdownOpen(false);
+        }
+      }
+      
+      // Check for ICD9 dropdown
+      if (icd9DropdownOpen) {
+        const isClickInsideInput = icd9InputRef.current?.contains(target);
+        const isClickInsideDropdown = icd9DropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setIcd9DropdownOpen(false);
+        }
+      }
+      
+      // Check for ICD10 dropdown
+      if (icd10DropdownOpen) {
+        const isClickInsideInput = icd10InputRef.current?.contains(target);
+        const isClickInsideDropdown = icd10DropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setIcd10DropdownOpen(false);
+        }
+      }
+      
+      // Check for Ruangan dropdown
+      if (ruanganDropdownOpen) {
+        const isClickInsideInput = ruanganInputRef.current?.contains(target);
+        const isClickInsideDropdown = ruanganDropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setRuanganDropdownOpen(false);
+        }
+      }
+      
+      // Check for DPJP dropdown
+      if (dpjpDropdownOpen) {
+        const isClickInsideInput = dpjpInputRef.current?.contains(target);
+        const isClickInsideDropdown = dpjpDropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setDpjpDropdownOpen(false);
+        }
+      }
+
+      // Check for name (pasien) dropdown
+      if (nameDropdownOpen) {
+        const isClickInsideInput = nameInputRef.current?.contains(target);
+        const isClickInsideDropdown = nameDropdownRef.current?.contains(target);
+        if (!isClickInsideInput && !isClickInsideDropdown) {
+          setNameDropdownOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [tindakanDropdownOpen, icd9DropdownOpen, icd10DropdownOpen, ruanganDropdownOpen, dpjpDropdownOpen, nameDropdownOpen]);
+
+  // Calculate total tarif RS when tindakan changes
+  // selectedTindakan sekarang menyimpan Deskripsi, jadi cari berdasarkan Deskripsi
+  useEffect(() => {
+    const total = selectedTindakan.reduce((sum, deskripsi) => {
+      const tarif = tarifRSList.find(t => t.Deskripsi === deskripsi);
+      return sum + (tarif?.Harga || 0);
+    }, 0);
+    setTotalTarifRS(total);
+  }, [selectedTindakan, tarifRSList]);
+
+  // Search pasien - HANYA MENGISI FORM, TIDAK SAVE
+  const handleSearchPasien = async () => {
+    if (!namaPasien.trim()) {
+      setError('Masukkan nama pasien terlebih dahulu');
+      return;
+    }
+
+    try {
+      setSearchingPasien(true);
+      setError('');
+      const response = await searchPasien(namaPasien);
+      
+      if (response.error) {
+        setError(response.error);
+        setSearchResults([]);
+        return;
+      }
+
+      if (response.data?.data) {
+        setSearchResults(response.data.data);
+        // Open suggestion dropdown when we get results
+        setNameDropdownOpen(response.data.data.length > 0);
+        if (response.data.data.length > 0) {
+          // Hanya mengisi form dengan hasil pertama (saat tombol search diklik)
+          const pasien = response.data.data[0];
+          setIdPasien(pasien.ID_Pasien.toString());
+          setUsia(pasien.Usia.toString());
+          setGender(pasien.Jenis_Kelamin);
+          setRuangan(pasien.Ruangan);
+          setKelas(pasien.Kelas);
+
+          // Set search value untuk ruangan dan DPJP jika ada
+          if (pasien.Ruangan) {
+            // Ruangan dari backend bisa berupa ID atau nama; coba cocokkan berdasarkan ID dulu
+            const ruanganDataById = ruanganList.find(r => r.ID_Ruangan?.toString() === pasien.Ruangan?.toString());
+            if (ruanganDataById) {
+              setRuanganSearch(ruanganDataById.Nama_Ruangan);
+            } else {
+              // Jika backend mengembalikan nama ruangan langsung, gunakan nilainya
+              setRuanganSearch(pasien.Ruangan);
+            }
+          }
+
+          // Load riwayat billing aktif (tindakan & ICD sebelumnya)
+          await loadBillingAktifHistory(pasien.Nama_Pasien);
+        }
+      }
+    } catch (err) {
+      setError('Gagal mencari pasien');
+      console.error(err);
+    } finally {
+      setSearchingPasien(false);
+    }
+  };
+
+  // Load riwayat billing aktif untuk pasien
+  const loadBillingAktifHistory = async (namaPasien: string) => {
+    try {
+      const response = await fetch(`/api/billing/aktif?nama_pasien=${encodeURIComponent(namaPasien)}`);
+      
+      if (response.status === 404) {
+        console.log('Tidak ada billing aktif untuk pasien ini');
+        setBillingHistory(null);
+        setBillingHistoryInfo('Tidak ada riwayat billing aktif untuk pasien ini.');
+        setTotalTarifRS(0);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const billingData = data.data || {};
+
+      // Hanya ambil data untuk ditampilkan di tabel, TIDAK auto-fill form
+      const tindakan = Array.isArray(billingData.tindakan_rs) ? billingData.tindakan_rs : [];
+      const icd9 = Array.isArray(billingData.icd9) ? billingData.icd9 : [];
+      const icd10 = Array.isArray(billingData.icd10) ? billingData.icd10 : [];
+      // INACBG mungkin belum tersedia di endpoint ini, jadi kita set array kosong untuk sementara
+      const inacbgRI = Array.isArray(billingData.inacbg_ri) ? billingData.inacbg_ri : [];
+      const inacbgRJ = Array.isArray(billingData.inacbg_rj) ? billingData.inacbg_rj : [];
+      const inacbg = [...inacbgRI, ...inacbgRJ];
+
+      // Calculate total_tarif_rs dari tindakan_rs dengan lookup di tarifRSList
+      let calculatedTotalTarif = 0;
+      tindakan.forEach((deskripsi: string) => {
+        const tarif = tarifRSList.find(t => t.Deskripsi === deskripsi);
+        if (tarif && tarif.Harga) {
+          calculatedTotalTarif += tarif.Harga;
+        }
+      });
+
+      // Set billing history untuk ditampilkan di tabel saja
+      if (tindakan.length > 0 || icd9.length > 0 || icd10.length > 0 || inacbg.length > 0) {
+        setBillingHistory({ tindakan_rs: tindakan, icd9, icd10, inacbg, total_tarif_rs: calculatedTotalTarif });
+        setBillingHistoryInfo('Riwayat billing aktif berhasil dimuat.');
+      } else {
+        setBillingHistory(null);
+        setBillingHistoryInfo('Tidak ada riwayat billing aktif untuk pasien ini.');
+      }
+
+      // Auto-fill total_tarif_rs ke form dari calculated total
+      setTotalTarifRS(calculatedTotalTarif);
+
+      console.log('Billing aktif history loaded (calculated tarif):', { tindakan, icd9, icd10, inacbg, calculatedTotalTarif });
+    } catch (err) {
+      console.error('Error loading billing history:', err);
+      setBillingHistory(null);
+      setBillingHistoryInfo('Error: Gagal memload riwayat billing.');
+      setTotalTarifRS(0);
+    }
+  };
+
+  // Debounced live search when typing patient name
+  const onNameChange = (value: string) => {
+    setNamaPasien(value);
+    // clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // only search when 2+ chars
+    if (value.trim().length < 2) {
+      setSearchResults([]);
+      setNameDropdownOpen(false);
+      return;
+    }
+
+    // schedule search
+    searchTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        setSearchingPasien(true);
+        const res = await searchPasien(value);
+        if (res.error) {
+          setError(res.error);
+          setSearchResults([]);
+          setNameDropdownOpen(false);
+        } else if (res.data?.data) {
+          setSearchResults(res.data.data);
+          setNameDropdownOpen(res.data.data.length > 0);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSearchingPasien(false);
+      }
+    }, 300);
+  };
+
+  // select pasien from suggestions and fill form, mapping gender
+  const selectPasien = (pasien: any) => {
+    if (!pasien) return;
+    setNamaPasien(pasien.Nama_Pasien || '');
+    setIdPasien(pasien.ID_Pasien?.toString() || '');
+    setUsia(pasien.Usia?.toString() || '');
+
+    // Map backend gender values to the form's labels
+    const jk = (pasien.Jenis_Kelamin || '').toString().toLowerCase();
+    if (jk.includes('laki') || jk.includes('pria')) {
+      setGender('Pria');
+    } else if (jk.includes('wanita') || jk.includes('perempuan')) {
+      setGender('Wanita');
+    } else {
+      setGender(pasien.Jenis_Kelamin || 'Pria');
+    }
+
+    setRuangan(pasien.Ruangan || '');
+    setKelas(pasien.Kelas || '');
+
+    // Set search value untuk ruangan jika possible
+    if (pasien.Ruangan) {
+      const ruanganDataById = ruanganList.find(r => r.ID_Ruangan?.toString() === pasien.Ruangan?.toString());
+      if (ruanganDataById) {
+        setRuanganSearch(ruanganDataById.Nama_Ruangan);
+      } else {
+        setRuanganSearch(pasien.Ruangan);
+      }
+    }
+
+    setSearchResults([]);
+    setNameDropdownOpen(false);
+
+    // Clear form fields (tindakan, ICD9, ICD10) saat select pasien baru
+    // User harus input data fresh, tidak boleh carry-over dari pasien sebelumnya
+    setSelectedTindakan([]);
+    setSelectedICD9([]);
+    setSelectedICD10([]);
+
+    // Load riwayat billing aktif (untuk display di tabel + auto-fill total_tarif_rs)
+    loadBillingAktifHistory(pasien.Nama_Pasien);
+  };
+
+  // Add tindakan - menyimpan Deskripsi (bukan KodeRS) karena backend mencari dengan Tindakan_RS (Deskripsi)
+  const handleAddTindakan = (kode: string) => {
+    const tarif = tarifRSList.find(t => t.KodeRS === kode);
+    if (tarif && tarif.Deskripsi && !selectedTindakan.includes(tarif.Deskripsi)) {
+      setSelectedTindakan([...selectedTindakan, tarif.Deskripsi]);
+      setTindakanSearch('');
+      setTindakanDropdownOpen(false);
+    }
+  };
+
+  // Filter tindakan berdasarkan search
+  const filteredTindakan = tarifRSList.filter((t) =>
+    t.Deskripsi?.toLowerCase().includes(tindakanSearch.toLowerCase()) ||
+    t.KodeRS?.toLowerCase().includes(tindakanSearch.toLowerCase())
+  );
+
+  // Remove tindakan - sekarang menggunakan Deskripsi
+  const handleRemoveTindakan = (deskripsi: string) => {
+    setSelectedTindakan(selectedTindakan.filter(t => t !== deskripsi));
+  };
+
+  // Add ICD9 - menyimpan Prosedur (bukan Kode_ICD9) karena backend mencari dengan Prosedur
+  const handleAddICD9 = (kode: string) => {
+    const icd = icd9List.find(i => i.Kode_ICD9 === kode);
+    if (icd && icd.Prosedur && !selectedICD9.includes(icd.Prosedur)) {
+      setSelectedICD9([...selectedICD9, icd.Prosedur]);
+      setIcd9Search('');
+      setIcd9DropdownOpen(false);
+    }
+  };
+
+  // Filter ICD9 berdasarkan search
+  const filteredICD9 = icd9List.filter((icd) =>
+    icd.Prosedur?.toLowerCase().includes(icd9Search.toLowerCase()) ||
+    icd.Kode_ICD9?.toLowerCase().includes(icd9Search.toLowerCase())
+  );
+
+  // Remove ICD9 - sekarang menggunakan Prosedur
+  const handleRemoveICD9 = (prosedur: string) => {
+    setSelectedICD9(selectedICD9.filter(i => i !== prosedur));
+  };
+
+  // Add ICD10 - menyimpan Diagnosa (bukan Kode_ICD10) karena backend mencari dengan Diagnosa
+  const handleAddICD10 = (kode: string) => {
+    const icd = icd10List.find(i => i.Kode_ICD10 === kode);
+    if (icd && icd.Diagnosa && !selectedICD10.includes(icd.Diagnosa)) {
+      setSelectedICD10([...selectedICD10, icd.Diagnosa]);
+      setIcd10Search('');
+      setIcd10DropdownOpen(false);
+    }
+  };
+
+  // Filter ICD10 berdasarkan search
+  const filteredICD10 = icd10List.filter((icd) =>
+    icd.Diagnosa?.toLowerCase().includes(icd10Search.toLowerCase()) ||
+    icd.Kode_ICD10?.toLowerCase().includes(icd10Search.toLowerCase())
+  );
+
+  // Handle select Ruangan
+  const handleSelectRuangan = (idRuangan: string, namaRuangan: string) => {
+    setRuangan(namaRuangan);
+    setRuanganSearch(namaRuangan);
+    setRuanganDropdownOpen(false);
+  };
+
+  // Filter Ruangan berdasarkan search
+  const filteredRuangan = ruanganList.filter((r) =>
+    r.Nama_Ruangan?.toLowerCase().includes(ruanganSearch.toLowerCase()) ||
+    r.ID_Ruangan?.toString().toLowerCase().includes(ruanganSearch.toLowerCase())
+  );
+
+  // Handle select DPJP
+  const handleSelectDPJP = (idDokter: string, namaDokter: string) => {
+    setDpjp(idDokter);
+    setDpjpSearch(namaDokter);
+    setDpjpDropdownOpen(false);
+  };
+
+  // Filter DPJP berdasarkan search
+  const filteredDPJP = dokterList.filter((d) =>
+    d.Nama_Dokter?.toLowerCase().includes(dpjpSearch.toLowerCase()) ||
+    d.ID_Dokter?.toString().toLowerCase().includes(dpjpSearch.toLowerCase())
+  );
+
+  // Remove duplicates based on Nama_Dokter (keep first occurrence)
+  const uniqueDPJP = filteredDPJP.filter((d, index, self) =>
+    index === self.findIndex((t) => t.Nama_Dokter === d.Nama_Dokter)
+  );
+
+  // Remove duplicates from full dokterList as well
+  const uniqueDokterList = dokterList.filter((d, index, self) =>
+    index === self.findIndex((t) => t.Nama_Dokter === d.Nama_Dokter)
+  );
+
+  // Remove ICD10 - sekarang menggunakan Diagnosa
+  const handleRemoveICD10 = (diagnosa: string) => {
+    setSelectedICD10(selectedICD10.filter(i => i !== diagnosa));
+  };
+
+  // Submit billing - HANYA INI YANG SAVE KE DATABASE
+  // HANYA DIPANGGIL SAAT TOMBOL SAVE DIKLIK - TIDAK ADA AUTO SAVE
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Debug: Log untuk memastikan hanya dipanggil saat tombol Save diklik
+    console.log('handleSubmit called - User clicked Save button');
+    
+    // Prevent multiple submissions
+    if (isSubmitting || loading) {
+      console.log('Submit blocked - already submitting');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    // Validation - Pastikan semua field wajib terisi
+    if (!namaPasien || !usia || !ruangan || !kelas || !dpjp || !tanggalMasuk || !gender) {
+      setError('Mohon lengkapi semua field yang wajib diisi');
+      return;
+    }
+
+    if (selectedTindakan.length === 0 || selectedICD10.length === 0) {
+      setError('Mohon pilih minimal satu tindakan dan ICD10');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setLoading(true);
+
+      // Get dokter name from ID
+      const selectedDokter = dokterList.find(d => d.ID_Dokter.toString() === dpjp);
+      if (!selectedDokter) {
+        setError('Dokter tidak ditemukan');
+        setLoading(false);
+        return;
+      }
+
+      const billingData: BillingRequest = {
+        nama_dokter: [selectedDokter.Nama_Dokter],
+        nama_pasien: namaPasien,
+        jenis_kelamin: gender,
+        usia: parseInt(usia),
+        ruangan: ruangan,
+        kelas: kelas,
+        tindakan_rs: selectedTindakan,
+        tanggal_keluar: tanggalKeluar || undefined,
+        icd9: selectedICD9,
+        icd10: selectedICD10,
+        cara_bayar: caraBayar,
+        total_tarif_rs: totalTarifRS,
+      };
+
+      const response = await createBilling(billingData);
+
+      if (response.error) {
+        setError(response.error);
+        setLoading(false);
+        return;
+      }
+
+      if (response.data) {
+        setSuccess('Billing berhasil dibuat!');
+        
+        // Simpan data ke localStorage untuk INACBG admin page
+        const billingResponse = response.data.data?.billing || {};
+        const billingDataForINACBG = {
+          id_billing: billingResponse.ID_Billing,
+          nama_pasien: namaPasien,
+          id_pasien: idPasien,
+          usia: parseInt(usia),
+          gender: gender,
+          ruangan: ruangan,
+          kelas: kelas,
+          tindakan: selectedTindakan,
+          icd9: selectedICD9,
+          icd10: selectedICD10,
+          total_tarif_rs: totalTarifRS,
+          cara_bayar: caraBayar,
+          tanggal_masuk: tanggalMasuk,
+          tanggal_keluar: tanggalKeluar || null,
+        };
+        localStorage.setItem('currentBillingData', JSON.stringify(billingDataForINACBG));
+        console.log('💾 Billing data saved to localStorage:', billingDataForINACBG);
+        
+        // Reset form setelah berhasil save
+        setTimeout(() => {
+          setNamaPasien('');
+          setIdPasien('');
+          setUsia('');
+          setGender('Pria');
+          setRuangan('');
+          setRuanganSearch('');
+          setKelas('');
+          setTanggalMasuk('');
+          setTanggalKeluar('');
+          setDpjp('');
+          setDpjpSearch('');
+          setSelectedTindakan([]);
+          setSelectedICD9([]);
+          setSelectedICD10([]);
+          setTotalTarifRS(0);
+          setSearchResults([]);
+          setSuccess('');
+        }, 2000);
+      }
+    } catch (err) {
+      setError('Gagal membuat billing. Pastikan backend server berjalan.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-   <div className="p-3 sm:p-4 md:p-6 bg-white min-h-screen">
-      {/* Tanggal dan Icon */}
-      <div className="flex justify-between items-center mb-2 sm:mb-3">
-        <div className="text-xs sm:text-sm text-[#2591D0]">Senin, 8 Desember 2025</div>
-        <FaExternalLinkAlt className="text-[#2591D0] cursor-pointer hover:text-[#1e7ba8] text-sm sm:text-base" />
+    <div className="p-3 sm:p-4 md:p-6 bg-white w-full max-w-full">
+      {/* Header dengan Tanggal */}
+      <div className="mb-2 sm:mb-3">
+        <div className="text-xs sm:text-sm text-[#2591D0]">
+          {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
       </div>
+
+      {/* Title */}
       <div className="text-lg sm:text-xl text-[#2591D0] mb-3 sm:mb-4 font-bold">Data Pasien</div>
-      {/* Data Pasien */}
-      <div className="">
-        {/* Nama */}
-       <div className="ml-0 sm:ml-4 text-sm sm:text-md text-[#2591D0] mb-2 sm:mb-3 font-bold">
-        <p className="mb-2">Nama Lengkap</p>
-          <div className="relative mb-3 sm:mb-4">
-        <input
-          type="text"
-          placeholder="Masukkan nama lengkap"
-          className="w-full border text-sm focus:outline-0 border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] focus:ring-2 focus:ring-blue-400"
-        />
-      </div>
-       </div>
-        {/* ID, Usia, Jenis kelamin */}
-       <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-x-6 sm:gap-y-6">
-      {/* ID Pasien */}
-      <div>
-        <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">ID Pasien</label>
-        <input
-          type="text"
-          placeholder="Masukkan ID pasien"
-          className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-        />
-      </div>
 
-      {/* Usia */}
-      <div>
-        <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Usia</label>
-        <input
-          type="number"
-          placeholder="Masukkan usia"
-          className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-        />
-      </div>
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
+          {success}
+        </div>
+      )}
 
-      {/* Jenis Kelamin */}
-      <div>
-        <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Jenis Kelamin</label>
-        <div className="flex items-center space-x-4 sm:space-x-6 h-10 sm:h-12"> 
-          <div className="flex items-center">
-            <input
-              id="radio-pria"
-              type="radio"
-              value="Pria"
-              name="jenis_kelamin"
-             
-                           checked={gender === 'Pria'}
-              onChange={(e) => setGender(e.target.value)}
-    className="w-4 h-4 
-               text-care-blue 
-               bg-gray-100 border-gray-300 
-               accent-[#2591D0]"
-  />
-            <label htmlFor="radio-pria" className="ml-2 text-sm font-medium text-[#2591D0]">Pria</label>
+      <form 
+        onSubmit={handleSubmit} 
+        className="w-full"
+        onKeyDown={(e) => {
+          // Prevent form submission on Enter key unless it's the submit button
+          if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
+            e.preventDefault();
+          }
+        }}
+      >
+        {/* Data Pasien */}
+        <div className="w-full max-w-full">
+          {/* Nama Lengkap */}
+          <div className="ml-0 sm:ml-4 text-sm sm:text-md text-[#2591D0] mb-2 sm:mb-3 font-bold">
+            <p className="mb-2">Nama Lengkap</p>
+            <div className="relative mb-3 sm:mb-4 flex gap-2">
+              <input
+                ref={nameInputRef}
+                type="text"
+                placeholder="Masukkan nama lengkap"
+                value={namaPasien}
+                onChange={(e) => onNameChange(e.target.value)}
+                onKeyDown={(e) => {
+                  // Prevent form submission on Enter in input field
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
+                className="flex-1 border text-sm focus:outline-0 border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] focus:ring-2 focus:ring-blue-400"
+              />
+              <button
+                type="button"
+                onClick={handleSearchPasien}
+                disabled={searchingPasien || !namaPasien.trim()}
+                className="px-4 bg-[#2591D0] text-white rounded-full hover:bg-[#1e7ba8] disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                <FaSearch />
+              </button>
+            </div>
+            {nameDropdownOpen && searchResults.length > 0 && (
+              <div
+                ref={nameDropdownRef}
+                className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(15rem,calc(100vh-12rem))] overflow-y-auto"
+                style={{ left: 0 }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {searchResults.map((p) => (
+                  <div
+                    key={p.ID_Pasien}
+                    onClick={() => selectPasien(p)}
+                    className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                  >
+                    <div className="font-medium">{p.Nama_Pasien}</div>
+                    <div className="text-xs text-gray-600">{p.Usia} tahun — {p.Ruangan}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchResults.length > 0 && (
+              <div className="mb-2 text-xs text-gray-600">
+                Ditemukan {searchResults.length} pasien. Data otomatis terisi.
+              </div>
+            )}
           </div>
-          
-          <div className="flex items-center">
-            <input
-              id="radio-wanita"
-              type="radio"
-              value="Wanita"
-              checked={gender === 'Wanita'}
-              onChange={(e) => setGender(e.target.value)}
-    className="w-4 h-4 
-               text-care-blue 
-               bg-gray-100 border-gray-300 
-               accent-[#2591D0]"
-  />
-             
-            <label htmlFor="radio-wanita" className="ml-2 text-sm font-medium text-[#2591D0]">Wanita</label>
+
+          {/* Usia, Jenis kelamin */}
+          <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 sm:gap-y-6 w-full max-w-full">
+            {/* Usia */}
+            <div>
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Usia</label>
+              <input
+                type="number"
+                placeholder="Masukkan usia"
+                value={usia}
+                onChange={(e) => setUsia(e.target.value)}
+                onKeyDown={(e) => {
+                  // Prevent form submission on Enter
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
+                className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                required
+              />
+            </div>
+
+            {/* Jenis Kelamin */}
+            <div>
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Jenis Kelamin</label>
+              <div className="flex items-center space-x-3 sm:space-x-4 h-9 sm:h-10">
+                <div className="flex items-center">
+                  <input
+                    id="radio-pria"
+                    type="radio"
+                    value="Laki-Laki"
+                    name="jenis_kelamin"
+                    checked={gender === 'Laki-Laki'}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-5 h-5 text-care-blue bg-gray-100 border-gray-300 accent-[#2591D0]"
+                  />
+                  <label htmlFor="radio-pria" className="ml-1.5 text-xs sm:text-sm font-medium text-[#2591D0]">Pria</label>
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    id="radio-wanita"
+                    type="radio"
+                    value="Perempuan"
+                    checked={gender === 'Perempuan'}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-5 h-5 text-care-blue bg-gray-100 border-gray-300 accent-[#2591D0]"
+                  />
+                  <label htmlFor="radio-wanita" className="ml-1.5 text-xs sm:text-sm font-medium text-[#2591D0]">Wanita</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Ruang, Kelas */}
+          <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6 w-full max-w-full">
+            {/* Ruang */}
+            <div className="relative">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Ruang</label>
+              <div className="relative">
+                <input
+                  ref={ruanganInputRef}
+                  type="text"
+                  placeholder="Cari ruang..."
+                  value={ruanganSearch}
+                  onChange={(e) => {
+                    setRuanganSearch(e.target.value);
+                    setRuanganDropdownOpen(true);
+                  }}
+                  onFocus={() => {
+                    if (!ruanganJustClosed) {
+                      setRuanganDropdownOpen(true);
+                    }
+                    setRuanganJustClosed(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && filteredRuangan.length > 0) {
+                      handleSelectRuangan(filteredRuangan[0].ID_Ruangan.toString(), filteredRuangan[0].Nama_Ruangan);
+                      e.preventDefault();
+                    }
+                  }}
+                  className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  required
+                />
+                <FaChevronDown
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (ruanganDropdownOpen) {
+                      setRuanganJustClosed(true);
+                      setRuanganDropdownOpen(false);
+                    } else {
+                      setRuanganJustClosed(false);
+                      setRuanganDropdownOpen(true);
+                    }
+                  }}
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                />
+                {ruanganDropdownOpen && (
+                  <div 
+                    ref={ruanganDropdownRef}
+                    className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {(ruanganSearch ? filteredRuangan : ruanganList).map((r) => (
+                      <div
+                        key={r.ID_Ruangan}
+                        onClick={() => handleSelectRuangan(r.ID_Ruangan.toString(), r.Nama_Ruangan)}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                      >
+                        <div className="font-medium">{r.Nama_Ruangan}</div>
+                      </div>
+                    ))}
+                    {ruanganSearch && filteredRuangan.length === 0 && (
+                      <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                        Tidak ada hasil ditemukan
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Kelas */}
+            <div>
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Kelas</label>
+              <div className="relative">
+                <select
+                  value={kelas}
+                  onChange={(e) => setKelas(e.target.value)}
+                  className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  required
+                >
+                  <option value="" disabled>Pilih kelas</option>
+                  <option value="1" className="text-gray-700">Kelas 1</option>
+                  <option value="2" className="text-gray-700">Kelas 2</option>
+                  <option value="3" className="text-gray-700">Kelas 3</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Tanggal Masuk & Keluar */}
+          <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6 w-full max-w-full">
+            <div>
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">
+                Tanggal Masuk
+              </label>
+              <div className="relative">
+                <input
+                  ref={dateMasukRef}
+                  type="date"
+                  onChange={(e) => setTanggalMasuk(e.target.value)}
+                  value={tanggalMasuk}
+                  className="relative w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:hidden"
+                  required
+                />
+                <FaCalendarAlt
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (dateMasukRef.current) {
+                      dateMasukRef.current.type = "date";
+                      dateMasukRef.current.showPicker?.();
+                    }
+                  }}
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">
+                Tanggal Keluar
+              </label>
+              <div className="relative">
+                <input
+                  ref={dateKeluarRef}
+                  type="date"
+                  onChange={(e) => setTanggalKeluar(e.target.value)}
+                  value={tanggalKeluar}
+                  className="relative w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:hidden"
+                />
+                <FaCalendarAlt
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (dateKeluarRef.current) {
+                      dateKeluarRef.current.type = "date";
+                      dateKeluarRef.current.showPicker?.();
+                    }
+                  }}
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* DPJP */}
+          <div className="ml-0 sm:ml-4 mt-2 relative">
+            <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">DPJP</label>
+            <div className="relative">
+              <input
+                ref={dpjpInputRef}
+                type="text"
+                placeholder="Cari dokter..."
+                value={dpjpSearch}
+                onChange={(e) => {
+                  setDpjpSearch(e.target.value);
+                  setDpjpDropdownOpen(true);
+                }}
+                onFocus={() => {
+                  if (!dpjpJustClosed) {
+                    setDpjpDropdownOpen(true);
+                  }
+                  setDpjpJustClosed(false);
+                }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && uniqueDPJP.length > 0) {
+                      handleSelectDPJP(uniqueDPJP[0].ID_Dokter.toString(), uniqueDPJP[0].Nama_Dokter);
+                      e.preventDefault();
+                    }
+                  }}
+                className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                required
+              />
+              <FaChevronDown
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (dpjpDropdownOpen) {
+                    setDpjpJustClosed(true);
+                    setDpjpDropdownOpen(false);
+                  } else {
+                    setDpjpJustClosed(false);
+                    setDpjpDropdownOpen(true);
+                  }
+                }}
+                className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+              />
+              {dpjpDropdownOpen && (
+                <div 
+                  ref={dpjpDropdownRef}
+                  className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {(dpjpSearch ? uniqueDPJP : uniqueDokterList).map((d) => (
+                    <div
+                      key={d.ID_Dokter}
+                      onClick={() => handleSelectDPJP(d.ID_Dokter.toString(), d.Nama_Dokter)}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                    >
+                      <div className="font-medium">{d.Nama_Dokter}</div>
+                    </div>
+                  ))}
+                  {dpjpSearch && uniqueDPJP.length === 0 && (
+                    <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                      Tidak ada hasil ditemukan
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Baris 1: Tindakan dan Total Tarif RS - TERPISAH, TIDAK MENYATU */}
+          <div className="ml-0 sm:ml-4 mt-2 flex flex-col gap-4 sm:gap-6 w-full max-w-full">
+            {/* Tindakan dan Pemeriksaan Penunjang */}
+            <div className="w-full max-w-full relative">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Tindakan dan Pemeriksaan Penunjang</label>
+              <div className="flex items-center gap-2 sm:gap-3 mb-2 w-full max-w-full relative">
+                <div className="flex-1 relative">
+                  <input
+                    ref={tindakanInputRef}
+                    type="text"
+                    placeholder="Cari tindakan..."
+                    value={tindakanSearch}
+                    onChange={(e) => {
+                      setTindakanSearch(e.target.value);
+                      setTindakanDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (!tindakanJustClosed) {
+                        setTindakanDropdownOpen(true);
+                      }
+                      setTindakanJustClosed(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && filteredTindakan.length > 0) {
+                        handleAddTindakan(filteredTindakan[0].KodeRS);
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  />
+                  <FaChevronDown
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (tindakanDropdownOpen) {
+                        setTindakanJustClosed(true);
+                        setTindakanDropdownOpen(false);
+                      } else {
+                        setTindakanJustClosed(false);
+                        setTindakanDropdownOpen(true);
+                      }
+                    }}
+                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                  />
+                  {tindakanDropdownOpen && (
+                    <div 
+                      ref={tindakanDropdownRef}
+                      className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(20rem,calc(100vh-12rem))] overflow-y-auto"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {(tindakanSearch ? filteredTindakan : tarifRSList).map((t) => (
+                        <div
+                          key={t.KodeRS}
+                          onClick={() => handleAddTindakan(t.KodeRS)}
+                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                        >
+                          <div className="font-medium">{t.KodeRS}</div>
+                          <div className="text-xs text-gray-600">{t.Deskripsi}</div>
+                        </div>
+                      ))}
+                      {tindakanSearch && filteredTindakan.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                          Tidak ada hasil ditemukan
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
+                  onClick={() => {
+                    if (filteredTindakan.length > 0) {
+                      handleAddTindakan(filteredTindakan[0].KodeRS);
+                    }
+                  }}
+                >
+                  <FaPlus className="text-xs sm:text-sm" />
+                </button>
+              </div>
+              {/* Selected tindakan chips */}
+              {selectedTindakan.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedTindakan.map((t) => (
+                    <div key={t} className="flex items-center bg-blue-50 border border-blue-200 text-[#2591D0] rounded-full px-3 py-1 text-sm">
+                      <span className="mr-2">{t}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTindakan(t)}
+                        className="text-red-500 hover:text-red-700 ml-1"
+                        aria-label={`Hapus tindakan ${t}`}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Total Tarif RS */}
+            <div className="w-full max-w-full">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Total Tarif RS</label>
+              <input
+                type="text"
+                value={totalTarifRS.toLocaleString('id-ID')}
+                readOnly
+                className="w-full max-w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+              />
+            </div>
+          </div>
+
+          {/* Riwayat Billing Aktif (Tindakan & ICD Sebelumnya) */}
+          <div className="ml-0 sm:ml-4 mt-4 sm:mt-6 mb-4 sm:mb-6 w-full max-w-full">
+            <label className="block text-sm sm:text-md text-[#2591D0] mb-2 sm:mb-3 font-bold">Riwayat Tindakan & ICD (Billing Aktif)</label>
+            <div className="text-xs sm:text-sm text-blue-600 mb-3">{billingHistoryInfo}</div>
+            {billingHistory && (billingHistory.tindakan_rs.length > 0 || billingHistory.icd9.length > 0 || billingHistory.icd10.length > 0 || (billingHistory.inacbg && billingHistory.inacbg.length > 0)) && (
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto border border-blue-200 rounded-lg">
+                  <table className="w-full text-sm md:text-base border-collapse">
+                    <thead>
+                      <tr className="bg-blue-100 border-b border-blue-200">
+                        <th className="border border-blue-200 p-3 md:p-4 text-left font-semibold text-[#2591D0]">Tindakan RS</th>
+                        <th className="border border-blue-200 p-3 md:p-4 text-left font-semibold text-[#2591D0]">ICD 9</th>
+                        <th className="border border-blue-200 p-3 md:p-4 text-left font-semibold text-[#2591D0]">ICD 10</th>
+                        <th className="border border-blue-200 p-3 md:p-4 text-left font-semibold text-[#2591D0]">INACBG</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Math.max(billingHistory.tindakan_rs.length, billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg?.length || 0) > 0 ? (
+                        Array.from({
+                          length: Math.max(billingHistory.tindakan_rs.length, billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg?.length || 0)
+                        }).map((_, idx) => (
+                          <tr key={`history-row-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50'}>
+                            <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
+                              {billingHistory.tindakan_rs[idx] || '-'}
+                            </td>
+                            <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
+                              {billingHistory.icd9[idx] || '-'}
+                            </td>
+                            <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
+                              {billingHistory.icd10[idx] || '-'}
+                            </td>
+                            <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
+                              {billingHistory.inacbg?.[idx] || '-'}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="border border-blue-200 p-4 text-center text-gray-500">
+                            Tidak ada riwayat
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile/Tablet Card View */}
+                <div className="md:hidden space-y-3">
+                  {Math.max(billingHistory.tindakan_rs.length, billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg?.length || 0) > 0 ? (
+                    Array.from({
+                      length: Math.max(billingHistory.tindakan_rs.length, billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg?.length || 0)
+                    }).map((_, idx) => (
+                      <div
+                        key={`history-card-${idx}`}
+                        className="bg-white border border-blue-200 rounded-lg shadow-sm p-3 sm:p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex flex-col space-y-1">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Tindakan RS
+                            </span>
+                            <span className="text-sm text-[#2591D0] break-words">
+                              {billingHistory.tindakan_rs[idx] || '-'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col space-y-1">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              ICD 9
+                            </span>
+                            <span className="text-sm text-[#2591D0] break-words">
+                              {billingHistory.icd9[idx] || '-'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col space-y-1">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              ICD 10
+                            </span>
+                            <span className="text-sm text-[#2591D0] break-words">
+                              {billingHistory.icd10[idx] || '-'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col space-y-1 pt-2 border-t border-blue-100">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              INACBG
+                            </span>
+                            <span className="text-sm text-[#2591D0] break-words">
+                              {billingHistory.inacbg?.[idx] || '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-gray-500 text-sm bg-white border border-blue-200 rounded-lg">
+                      Tidak ada riwayat
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Baris 2: ICD 9 dan ICD 10 - BERSEBELAHAN, TERPISAH KIRI KANAN */}
+          <div className="ml-0 sm:ml-4 mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6 w-full max-w-full">
+            {/* ICD 9 */}
+            <div className="w-full relative">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">ICD 9</label>
+              <div className="flex items-center gap-2 sm:gap-3 mb-2 relative">
+                <div className="flex-1 relative">
+                  <input
+                    ref={icd9InputRef}
+                    type="text"
+                    placeholder="Masukkan prosedur atau klik untuk melihat semua"
+                    value={icd9Search}
+                    onChange={(e) => {
+                      setIcd9Search(e.target.value);
+                      setIcd9DropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (!icd9JustClosed) {
+                        setIcd9DropdownOpen(true);
+                      }
+                      setIcd9JustClosed(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && filteredICD9.length > 0) {
+                        handleAddICD9(filteredICD9[0].Kode_ICD9);
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  />
+                  <FaChevronDown
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (icd9DropdownOpen) {
+                        setIcd9JustClosed(true);
+                        setIcd9DropdownOpen(false);
+                      } else {
+                        setIcd9JustClosed(false);
+                        setIcd9DropdownOpen(true);
+                      }
+                    }}
+                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                  />
+                  {icd9DropdownOpen && (
+                    <div 
+                      ref={icd9DropdownRef}
+                      className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {(icd9Search ? filteredICD9 : icd9List).map((icd) => (
+                        <div
+                          key={icd.Kode_ICD9}
+                          onClick={() => handleAddICD9(icd.Kode_ICD9)}
+                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                        >
+                          <div className="font-medium">{icd.Kode_ICD9}</div>
+                          <div className="text-xs text-gray-600">{icd.Prosedur}</div>
+                        </div>
+                      ))}
+                      {icd9Search && filteredICD9.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                          Tidak ada hasil ditemukan
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
+                  onClick={() => {
+                    if (filteredICD9.length > 0) {
+                      handleAddICD9(filteredICD9[0].Kode_ICD9);
+                    }
+                  }}
+                >
+                  <FaPlus className="text-xs sm:text-sm" />
+                </button>
+              </div>
+              {/* Selected ICD9 chips */}
+              {selectedICD9.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedICD9.map((p) => (
+                    <div key={p} className="flex items-center bg-blue-50 border border-blue-200 text-[#2591D0] rounded-full px-3 py-1 text-sm">
+                      <span className="mr-2">{p}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveICD9(p)}
+                        className="text-red-500 hover:text-red-700 ml-1"
+                        aria-label={`Hapus ICD9 ${p}`}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ICD 10 */}
+            <div className="w-full relative">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">ICD 10</label>
+              <div className="flex items-center gap-2 sm:gap-3 mb-2 relative">
+                <div className="flex-1 relative">
+                  <input
+                    ref={icd10InputRef}
+                    type="text"
+                    placeholder="Masukkan diagnosa atau klik untuk melihat semua"
+                    value={icd10Search}
+                    onChange={(e) => {
+                      setIcd10Search(e.target.value);
+                      setIcd10DropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (!icd10JustClosed) {
+                        setIcd10DropdownOpen(true);
+                      }
+                      setIcd10JustClosed(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && filteredICD10.length > 0) {
+                        handleAddICD10(filteredICD10[0].Kode_ICD10);
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  />
+                  <FaChevronDown
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (icd10DropdownOpen) {
+                        setIcd10JustClosed(true);
+                        setIcd10DropdownOpen(false);
+                      } else {
+                        setIcd10JustClosed(false);
+                        setIcd10DropdownOpen(true);
+                      }
+                    }}
+                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
+                  />
+                  {icd10DropdownOpen && (
+                    <div 
+                      ref={icd10DropdownRef}
+                      className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {(icd10Search ? filteredICD10 : icd10List).map((icd) => (
+                        <div
+                          key={icd.Kode_ICD10}
+                          onClick={() => handleAddICD10(icd.Kode_ICD10)}
+                          className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                        >
+                          <div className="font-medium">{icd.Kode_ICD10}</div>
+                          <div className="text-xs text-gray-600">{icd.Diagnosa}</div>
+                        </div>
+                      ))}
+                      {icd10Search && filteredICD10.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                          Tidak ada hasil ditemukan
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
+                  onClick={() => {
+                    if (filteredICD10.length > 0) {
+                      handleAddICD10(filteredICD10[0].Kode_ICD10);
+                    }
+                  }}
+                >
+                  <FaPlus className="text-xs sm:text-sm" />
+                </button>
+              </div>
+              {/* Selected ICD10 chips */}
+              {selectedICD10.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedICD10.map((d) => (
+                    <div key={d} className="flex items-center bg-blue-50 border border-blue-200 text-[#2591D0] rounded-full px-3 py-1 text-sm">
+                      <span className="mr-2">{d}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveICD10(d)}
+                        className="text-red-500 hover:text-red-700 ml-1"
+                        aria-label={`Hapus ICD10 ${d}`}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cara Bayar - di bawah ICD 9 */}
+            <div className="w-full">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Cara Bayar</label>
+              <div className="relative">
+                <select
+                  value={caraBayar}
+                  onChange={(e) => setCaraBayar(e.target.value)}
+                  className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
+                  required
+                >
+                  <option value="BPJS">BPJS</option>
+                  <option value="UMUM">UMUM</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Save Button - di bawah ICD 10 */}
+            <div className="w-full flex items-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-[#2591D0] text-white px-6 sm:px-8 py-2 sm:py-3 rounded-full font-medium hover:bg-[#1e7ba8] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base w-full"
+              >
+                {loading ? 'Menyimpan...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-      
-    </div>
-
-        {/* Ruang, Kelas */}
-<div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6">
-
-        {/* Ruang */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Ruang</label>
-          <div className="relative">
-            <select
-              className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-            >
-              <option value="" disabled>Pilih ruang</option>
-              <option className="text-gray-700">ICU</option>
-              <option className="text-gray-700">Kelas 1</option>
-            </select>
-            {/* Ikon panah ke bawah (opsional, karena select sudah memilikinya) */}
-          </div>
-        </div>
-
-        {/* Kelas */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold" >Kelas</label>
-          <div className="relative">
-            <select
-              className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0" 
-            >
-              <option value="" disabled>Pilih kelas</option>
-              <option className="text-gray-700">Kelas A</option>
-              <option className="text-gray-700">Kelas B</option>
-            </select>
-            {/* Ikon panah ke bawah (opsional) */}
-          </div>
-        </div>
-      </div>
-
-
-
-      {/* Tanggal Masuk */}
-      <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6">
-<div>
-  <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">
-    Tanggal Masuk
-  </label>
-
-  <div className="relative">
-    <input
-      ref={dateMasukRef}
-      type="text"
-      onFocus={(e) => (e.currentTarget.type = "date")}
-      onBlur={(e) => {
-        if (!e.currentTarget.value) e.currentTarget.type = "text"
-      }}
-      placeholder="Pilih tanggal"
-      className="
-        relative w-full 
-        border text-sm border-blue-200 
-        rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 
-        text-[#2591D0] placeholder-blue-400 
-        focus:ring-2 focus:ring-blue-400 
-        focus:border-blue-400 focus:outline-0
-
-        [&::-webkit-calendar-picker-indicator]:opacity-0
-        [&::-webkit-calendar-picker-indicator]:hidden
-      "
-    />
-
-    {/* ICON BISA DIKLIK */}
-    <FaCalendarAlt
-      onClick={() => {
-        if (dateMasukRef.current) {
-          dateMasukRef.current.showPicker?.()
-          dateMasukRef.current.focus()
-        }
-      }}
-      className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base"
-    />
-  </div>
-</div>
-
-
-        {/* Tanggal Keluar */}
-       <div>
-  <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">
-    Tanggal Keluar
-  </label>
-
-  <div className="relative">
-    <input
-      ref={dateKeluarRef}
-      type="text"
-      onFocus={(e) => (e.currentTarget.type = "date")}
-      onBlur={(e) => {
-        if (!e.currentTarget.value) e.currentTarget.type = "text"
-      }}
-      placeholder="Pilih tanggal"
-      className="
-        relative w-full 
-        border text-sm border-blue-200 
-        rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 
-        text-[#2591D0] placeholder-blue-400 
-        focus:ring-2 focus:ring-blue-400 
-        focus:border-blue-400 focus:outline-0
-
-        [&::-webkit-calendar-picker-indicator]:opacity-0
-        [&::-webkit-calendar-picker-indicator]:hidden
-      "
-    />
-
-    {/* ICON BISA DIKLIK */}
-    <FaCalendarAlt
-      onClick={() => {
-        if (dateKeluarRef.current) {
-          dateKeluarRef.current.showPicker?.()
-          dateKeluarRef.current.focus()
-        }
-      }}
-      className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base"
-    />
-  </div>
-</div>
-
-        
-      </div>
-
-      {/* DPJP */}
-      <div className="ml-0 sm:ml-4 mt-2">
-        <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">DPJP</label>
-        <div className="relative">
-          <select
-            className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-          >
-            <option value="" disabled>Pilih dokter penanggungjawab</option>
-            <option className="text-gray-700">Dr. Ahmad Fauzi</option>
-            <option className="text-gray-700">Dr. Siti Nurhaliza</option>
-            <option className="text-gray-700">Dr. Budi Santoso</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Tindakan dan Total Tarif RS - Baris 1 */}
-      <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6">
-        {/* Tindakan dan Pemeriksaan Penunjang */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Tindakan dan Pemeriksaan Penunjang</label>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <select
-              className="flex-1 border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-            >
-              <option value="" disabled>Masukkan tindakan</option>
-              <option className="text-gray-700">Operasi</option>
-              <option className="text-gray-700">Pemeriksaan Lab</option>
-              <option className="text-gray-700">Rontgen</option>
-            </select>
-            <button
-              type="button"
-              className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
-            >
-              <FaPlus className="text-xs sm:text-sm" />
-            </button>
-          </div>
-        </div>
-
-        {/* Total Tarif RS */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">Total Tarif RS</label>
-          <input
-            type="text"
-            placeholder=""
-            className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-          />
-        </div>
-      </div>
-
-      {/* ICD 9 dan ICD 10 - Baris 2 */}
-      <div className="ml-0 sm:ml-4 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-x-6 md:gap-x-12 sm:gap-y-6">
-        {/* ICD 9 */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">ICD 9</label>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <select
-              className="flex-1 border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-            >
-              <option value="" disabled>Masukkan prosedur</option>
-              <option className="text-gray-700">00.01 - Insisi</option>
-              <option className="text-gray-700">00.02 - Eksisi</option>
-              <option className="text-gray-700">00.03 - Biopsi</option>
-            </select>
-            <button
-              type="button"
-              className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
-            >
-              <FaPlus className="text-xs sm:text-sm" />
-            </button>
-          </div>
-        </div>
-
-        {/* ICD 10 */}
-        <div>
-          <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">ICD 10</label>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <select
-              className="flex-1 border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
-            >
-              <option value="" disabled>Masukkan diagnosa</option>
-              <option className="text-gray-700">A00 - Kolera</option>
-              <option className="text-gray-700">A01 - Demam Tifoid</option>
-              <option className="text-gray-700">A02 - Infeksi Salmonella</option>
-            </select>
-            <button
-              type="button"
-              className="w-7 h-7 sm:w-8 sm:h-8 bg-[#2591D0] rounded-full flex items-center justify-center text-white hover:bg-[#1e7ba8] transition-colors flex-shrink-0"
-            >
-              <FaPlus className="text-xs sm:text-sm" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Save Button */}
-      <div className="ml-0 sm:ml-4 mt-4 sm:mt-6 mb-4 sm:mb-6 flex justify-center">
-        <button
-          type="button"
-          className="bg-[#2591D0] text-white px-6 sm:px-8 py-2 sm:py-3 rounded-full font-medium hover:bg-[#1e7ba8] transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base w-full sm:w-auto"
-        >
-          Save
-        </button>
-      </div>
-      
-      </div>
+      </form>
     </div>
   );
 };

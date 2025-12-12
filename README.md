@@ -1,6 +1,8 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app) and configured for mobile deployment with [Capacitor](https://capacitorjs.com/).
 
 ## Getting Started
+
+### Web Development
 
 First, run the development server:
 
@@ -16,9 +18,75 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Mobile Development (Capacitor)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project supports both web and mobile platforms:
+- **Web**: Uses Next.js API routes as proxy to backend (no CORS issues)
+- **Mobile**: Uses direct backend calls (static export, no API routes)
+
+**Prerequisites:**
+- Backend server must be running (default: `http://localhost:8081`)
+- For production mobile app, set `NEXT_PUBLIC_API_URL` environment variable to your backend server URL
+
+**Build for Mobile (with static export):**
+
+**Windows:**
+```powershell
+# PowerShell
+.\build-mobile.ps1
+
+# Or CMD
+build-mobile.bat
+
+# Or manually set environment variable
+$env:NEXT_EXPORT="true"; npm run build; npx cap sync
+```
+
+**Linux/Mac:**
+```bash
+# Set environment variable and build
+NEXT_EXPORT=true npm run build && npx cap sync
+
+# Or use the npm script (requires cross-env)
+npm run build:mobile:export
+```
+
+**Note:** Regular `npm run build` is for web development (with API routes). Use the mobile build scripts above for Capacitor.
+
+**Open Native Projects:**
+
+```bash
+# Android
+npm run cap:open:android
+
+# iOS (macOS only)
+npm run cap:open:ios
+```
+
+**Run on Device/Emulator:**
+
+```bash
+# Android
+npm run cap:run:android
+
+# iOS
+npm run cap:run:ios
+```
+
+**Other Capacitor Commands:**
+
+```bash
+# Copy web assets only (without updating dependencies)
+npm run cap:copy
+
+# Sync web assets and update native dependencies
+npm run cap:sync
+```
+
+**How It Works:**
+- **Web Development**: API calls go through `/api` routes (Next.js proxy) → Backend Go server
+- **Mobile App**: API calls go directly to backend Go server (detected automatically via Capacitor)
+- The app automatically detects the platform and uses the appropriate API endpoint
 
 ## Learn More
 

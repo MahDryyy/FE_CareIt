@@ -7,35 +7,33 @@ interface LandingPageProps {
 
 const LandingPage = ({ onStartNow }: LandingPageProps) => {
   return (
-    <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-white flex flex-col lg:flex-row overflow-x-hidden">
       {/* Left Section - White Background */}
-      <div className="flex-1 flex flex-col justify-center px-4 sm:px-8 md:px-16 lg:px-24 py-8 sm:py-12">
+      <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 md:px-12 lg:px-16 xl:px-24 py-8 sm:py-12 lg:py-16">
         {/* Logo */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Image
-              src="/assets/LOGO_CAREIT.svg"
-              alt="CARE-IT Logo"
-              width={120}
-              height={60}
-              className="object-contain w-24 sm:w-32 md:w-40"
-              priority
-            />
-          </div>
+        <div className="mb-4 sm:mb-6 lg:mb-8">
+          <Image
+            src="/assets/LOGO_CAREIT.svg"
+            alt="CARE-IT Logo"
+            width={180}
+            height={90}
+            className="object-contain w-28 sm:w-32 md:w-40 lg:w-48"
+            priority
+          />
         </div>
 
         {/* Main Heading */}
-        <div className="mb-4 sm:mb-6">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-[#87CEEB] leading-tight">
+        <div className="mb-4 sm:mb-6 lg:mb-8">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-[#2591D0] leading-tight">
             TARIF BPJS TEPAT
             <br />
             LAYANAN HEBAT
-          </h2>
+          </h1>
         </div>
 
         {/* Descriptive Text */}
-        <div className="mb-6 sm:mb-8 max-w-2xl">
-          <p className="text-sm sm:text-base md:text-lg text-[#1e3a5f] leading-relaxed">
+        <div className="mb-6 sm:mb-8 lg:mb-10 max-w-2xl">
+          <p className="text-sm sm:text-base md:text-lg lg:text-xl text-[#2591D0] leading-relaxed">
             Care It memudahkan dokter memverifikasi tarif tindakan agar sesuai standar BPJS, 
             dengan fitur warning billing sign yang memberi peringatan otomatis saat tarif melebihi batas, 
             sehingga rumah sakit tetap patuh, aman, dan bebas overbilling.
@@ -46,66 +44,137 @@ const LandingPage = ({ onStartNow }: LandingPageProps) => {
         <div>
           <button 
             onClick={onStartNow}
-            className="bg-[#87CEEB] text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full font-bold text-base sm:text-lg uppercase hover:bg-[#6bb8d8] transition-colors shadow-lg w-full sm:w-auto"
+            className="bg-[#87CEEB] text-[#2591D0] px-8 sm:px-10 md:px-12 py-3 sm:py-4 md:py-5 rounded-full font-bold text-base sm:text-lg md:text-xl uppercase hover:bg-[#6bb8d8] hover:text-white transition-all duration-300 shadow-lg w-full sm:w-auto"
           >
             START NOW
           </button>
         </div>
       </div>
 
-      {/* Right Section - Blue Background with Curve */}
-      <div className="flex-1 relative hidden lg:block overflow-hidden min-h-[400px] lg:min-h-screen">
-        {/* Blue Background with White Curve */}
-        <div className="absolute inset-0 bg-[#87CEEB]">
-          {/* White Curve Overlay - from bottom left extending upward */}
-          <div 
-            className="absolute left-0 bottom-0 w-full h-full bg-white" 
-            style={{
-              clipPath: "ellipse(70% 100% at 0% 100%)"
-            }}>
+      {/* Right Section - White Background with Circle Decorative */}
+      <div className="flex-1 relative hidden md:block overflow-hidden min-h-[400px] lg:min-h-screen bg-white">
+        {/* Circular Decorative Element - Background */}
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+          <div className="relative" style={{ transform: 'translate(20%, -20%) scale(1.3)' }}>
+            <Image
+              src="/assets/LandingPage/lingkaranLandingPage.svg"
+              alt="Decorative Circle"
+              width={695}
+              height={738}
+              className="object-contain w-full h-full opacity-30"
+              priority
+              style={{ filter: 'brightness(0) saturate(100%) invert(40%) sepia(90%) saturate(2000%) hue-rotate(190deg) brightness(0.9) contrast(1.1)' }}
+            />
           </div>
         </div>
 
-        {/* 3D Doctor Illustration */}
-        <div className="absolute inset-0 flex items-center justify-center z-10">
+        {/* White Curve Overlay - Complex curved shape from right extending to left */}
+        <div className="absolute inset-0">
+          <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" style={{ zIndex: 1 }}>
+            <path
+              d="M 100 0 L 100 100 C 95 95, 85 85, 70 75 C 55 65, 40 55, 25 45 C 15 35, 8 25, 0 15 L 0 0 Z"
+              fill="white"
+            />
+          </svg>
+        </div>
+
+        {/* 3D Doctor Illustration - Aligned with logo top and text bottom */}
+        <div className="absolute inset-0 z-10" style={{ top: '8rem', bottom: '8rem' }}>
           <div className="relative w-full h-full flex items-center justify-center">
-            <div className="relative">
+            <div style={{ transform: 'translate(20%, -20%)' }}>
               <Image
                 src="/assets/LandingPage/dokterLucu.svg"
                 alt="Doctor Illustration"
-                width={450}
-                height={550}
-                className="object-contain w-full max-w-md lg:max-w-lg xl:max-w-xl"
+                width={480}
+                height={576}
+                className="object-contain w-full h-full max-w-[24rem] xl:max-w-[26rem] 2xl:max-w-[28rem]"
                 priority
               />
             </div>
           </div>
         </div>
 
-        {/* Floating Stethoscope Icon - Upper Middle Left (more centered horizontally) */}
-        <div className="absolute top-16 sm:top-24 left-1/4 z-20">
-          <div className="bg-[#87CEEB] rounded-2xl p-3 sm:p-4 shadow-xl">
+        {/* Floating Stethoscope Icon - Upper Left */}
+        <div className="absolute top-20 left-12 xl:left-16 z-20">
+          <Image
+            src="/assets/LandingPage/stetoskop.svg"
+            alt="Stethoscope"
+            width={120}
+            height={120}
+            className="object-contain w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-32 lg:h-32"
+          />
+        </div>
+
+        {/* Floating Syringe Icon - Lower Right */}
+        <div className="absolute bottom-20 right-12 xl:right-16 z-20">
+          <Image
+            src="/assets/LandingPage/suntik.svg"
+            alt="Syringe"
+            width={120}
+            height={120}
+            className="object-contain w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-32 lg:h-32"
+          />
+        </div>
+      </div>
+
+      {/* Mobile View - Show doctor illustration */}
+      <div className="lg:hidden w-full bg-white py-8 px-4 flex items-center justify-center relative min-h-[300px] sm:min-h-[350px] overflow-hidden">
+        {/* Circular Decorative Element - Background Mobile */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="relative w-[500px] h-[500px] sm:w-[600px] sm:h-[600px] max-w-none" style={{ transform: 'translate(15%, 10%)' }}>
             <Image
-              src="/assets/LandingPage/stetoskop.svg"
-              alt="Stethoscope"
-              width={56}
-              height={56}
-              className="object-contain w-10 h-10 sm:w-14 sm:h-14"
+              src="/assets/LandingPage/lingkaranLandingPage.svg"
+              alt="Decorative Circle"
+              width={695}
+              height={738}
+              className="object-contain w-full h-full opacity-20 sm:opacity-25"
+              priority
+              style={{ filter: 'brightness(0) saturate(100%) invert(40%) sepia(90%) saturate(2000%) hue-rotate(190deg) brightness(0.9) contrast(1.1)' }}
             />
           </div>
         </div>
 
-        {/* Floating Syringe Icon - Lower Right */}
-        <div className="absolute bottom-24 sm:bottom-32 right-8 sm:right-16 z-20">
-          <div className="bg-[#87CEEB] rounded-2xl p-3 sm:p-4 shadow-xl">
-            <Image
-              src="/assets/LandingPage/suntik.svg"
-              alt="Syringe"
-              width={56}
-              height={56}
-              className="object-contain w-10 h-10 sm:w-14 sm:h-14"
+        {/* White Curve for Mobile */}
+        <div className="absolute inset-0 overflow-hidden">
+          <svg className="absolute bottom-0 w-full h-full" preserveAspectRatio="none">
+            <path
+              d="M 0 100 L 100 100 L 100 60 C 80 50, 50 40, 0 30 Z"
+              fill="white"
             />
-          </div>
+          </svg>
+        </div>
+
+        {/* Doctor Illustration - Mobile */}
+        <div className="relative z-10">
+          <Image
+            src="/assets/LandingPage/dokterLucu.svg"
+            alt="Doctor Illustration"
+            width={260}
+            height={347}
+            className="object-contain w-full max-w-[13rem]"
+            priority
+          />
+        </div>
+
+        {/* Mobile Icons */}
+        <div className="absolute top-8 left-12 z-20">
+          <Image
+            src="/assets/LandingPage/stetoskop.svg"
+            alt="Stethoscope"
+            width={80}
+            height={80}
+            className="object-contain w-16 h-16 sm:w-20 sm:h-20"
+          />
+        </div>
+
+        <div className="absolute bottom-4 right-4 z-20">
+          <Image
+            src="/assets/LandingPage/suntik.svg"
+            alt="Syringe"
+            width={80}
+            height={80}
+            className="object-contain w-16 h-16 sm:w-20 sm:h-20"
+          />
         </div>
       </div>
     </div>
@@ -113,4 +182,3 @@ const LandingPage = ({ onStartNow }: LandingPageProps) => {
 };
 
 export default LandingPage;
-
