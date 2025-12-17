@@ -4,6 +4,9 @@ import Image from "next/image";
 import { useState } from "react";
 import { FaChevronDown } from "react-icons/fa";
 
+// Static import for logo
+import logoImage from "../../../public/assets/LOGO_CAREIT.svg";
+
 interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -67,7 +70,7 @@ const Sidebar = ({
         {/* LOGO */}
         <div className="p-3 sm:p-5 flex justify-center border-b border-blue-100">
           <Image
-            src="/assets/LOGO_CAREIT.svg"
+            src={logoImage}
             alt="Care It Logo"
             width={140}
             height={70}
@@ -83,10 +86,9 @@ const Sidebar = ({
             className={`
               w-full flex items-center gap-2 sm:gap-3 py-2 sm:py-3 px-2 sm:px-4
               rounded-lg sm:rounded-xl text-left transition-all
-              ${
-                activeMenu === "Home"
-                  ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
-                  : "text-gray-400 hover:bg-white"
+              ${activeMenu === "Home"
+                ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
+                : "text-gray-400 hover:bg-white"
               }
             `}
           >
@@ -106,25 +108,22 @@ const Sidebar = ({
               className={`
                 w-full flex items-center justify-between gap-2 sm:gap-3 py-2 sm:py-3 px-2 sm:px-4
                 rounded-lg sm:rounded-xl text-left transition-all
-                ${
-                  informasiItems.some((item) => activeMenu === item.name)
-                    ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
-                    : "text-gray-400 hover:bg-white"
+                ${informasiItems.some((item) => activeMenu === item.name)
+                  ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
+                  : "text-gray-400 hover:bg-white"
                 }
               `}
             >
               <div className="flex items-center gap-2 sm:gap-3">
-                <span className={`text-base sm:text-lg ${
-                  informasiItems.some((item) => activeMenu === item.name) ? "text-blue-500" : ""
-                }`}>
+                <span className={`text-base sm:text-lg ${informasiItems.some((item) => activeMenu === item.name) ? "text-blue-500" : ""
+                  }`}>
                   ℹ️
                 </span>
                 <span className="text-xs sm:text-sm font-medium">Informasi Umum</span>
               </div>
               <FaChevronDown
-                className={`text-xs transition-transform ${
-                  informasiDropdownOpen ? "rotate-180" : ""
-                }`}
+                className={`text-xs transition-transform ${informasiDropdownOpen ? "rotate-180" : ""
+                  }`}
               />
             </button>
 
@@ -138,10 +137,9 @@ const Sidebar = ({
                     className={`
                       w-full flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3
                       rounded-lg text-left text-xs sm:text-sm transition-all
-                      ${
-                        activeMenu === item.name
-                          ? "bg-blue-500 text-white"
-                          : "text-gray-600 hover:bg-blue-100"
+                      ${activeMenu === item.name
+                        ? "bg-blue-500 text-white"
+                        : "text-gray-600 hover:bg-blue-100"
                       }
                     `}
                   >
@@ -163,25 +161,22 @@ const Sidebar = ({
               className={`
                 w-full flex items-center justify-between gap-2 sm:gap-3 py-2 sm:py-3 px-2 sm:px-4
                 rounded-lg sm:rounded-xl text-left transition-all
-                ${
-                  billingItems.some((item) => activeMenu === item.name)
-                    ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
-                    : "text-gray-400 hover:bg-white"
+                ${billingItems.some((item) => activeMenu === item.name)
+                  ? "bg-white text-blue-600 border-l-4 border-blue-500 shadow-sm"
+                  : "text-gray-400 hover:bg-white"
                 }
               `}
             >
               <div className="flex items-center gap-2 sm:gap-3">
-                <span className={`text-base sm:text-lg ${
-                  billingItems.some((item) => activeMenu === item.name) ? "text-blue-500" : ""
-                }`}>
+                <span className={`text-base sm:text-lg ${billingItems.some((item) => activeMenu === item.name) ? "text-blue-500" : ""
+                  }`}>
                   ⚠️
                 </span>
                 <span className="text-xs sm:text-sm font-medium">Warning Billing Sign</span>
               </div>
               <FaChevronDown
-                className={`text-xs transition-transform ${
-                  warningDropdownOpen ? "rotate-180" : ""
-                }`}
+                className={`text-xs transition-transform ${warningDropdownOpen ? "rotate-180" : ""
+                  }`}
               />
             </button>
 
@@ -195,10 +190,9 @@ const Sidebar = ({
                     className={`
                       w-full flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3
                       rounded-lg text-left text-xs sm:text-sm transition-all
-                      ${
-                        activeMenu === item.name
-                          ? "bg-blue-500 text-white"
-                          : "text-gray-600 hover:bg-blue-100"
+                      ${activeMenu === item.name
+                        ? "bg-blue-500 text-white"
+                        : "text-gray-600 hover:bg-blue-100"
                       }
                     `}
                   >

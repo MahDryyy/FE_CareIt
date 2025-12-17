@@ -24,7 +24,7 @@ export default function Home() {
       if (event.state && event.state.page) {
         const page = event.state.page as "landing" | "login" | "dashboard" | "inacbg";
         setCurrentPage(page);
-        
+
         // Restore authentication state if needed
         if (page === "dashboard" || page === "inacbg") {
           const authStatus = localStorage.getItem("isAuthenticated");
@@ -54,55 +54,74 @@ export default function Home() {
   }, []);
 
   // Check authentication and restore page state on mount
+  // Check authentication and restore page state on mount
   useEffect(() => {
     const checkAuth = () => {
-      const authStatus = localStorage.getItem("isAuthenticated");
-      const role = localStorage.getItem("userRole");
-      const savedPage = localStorage.getItem("currentPage") as "landing" | "login" | "dashboard" | null;
-      
-      // Check if this is first visit in this browser session (using sessionStorage)
-      // This ensures that every time user opens URL (copy-paste, new tab, etc), 
-      // they see landing page first
-      const hasVisitedThisSession = sessionStorage.getItem("hasVisitedThisSession");
+      try {
+        console.log("Checking auth...");
+        const authStatus = localStorage.getItem("isAuthenticated");
+        const role = localStorage.getItem("userRole");
+        const savedPage = localStorage.getItem("currentPage") as "landing" | "login" | "dashboard" | null;
 
-      // Always show landing page on first visit in this session, regardless of auth status
-      if (!hasVisitedThisSession) {
-        // First time access in this session, always show landing page
-        setCurrentPage("landing");
-        sessionStorage.setItem("hasVisitedThisSession", "true");
-        setIsFirstVisit(true);
-        // Add to browser history
-        window.history.replaceState({ page: "landing" }, "", window.location.href);
-        // Don't save landing page to localStorage on first visit - wait for user interaction
-        setIsInitialized(true);
-        return;
-      }
-
-      // After first visit in this session, check authentication
-      if (authStatus === "true" && role) {
-        // User is authenticated, go to dashboard
-        setIsAuthenticated(true);
-        setUserRole(role as "dokter" | "admin");
-        setCurrentPage("dashboard");
-        window.history.replaceState({ page: "dashboard" }, "", window.location.href);
-      } else {
-        // User is not authenticated
-        // Check if there's a saved page (for refresh persistence)
-        if (savedPage && savedPage !== "dashboard") {
-          // Use saved page (can be landing or login)
-          setCurrentPage(savedPage);
-          window.history.replaceState({ page: savedPage }, "", window.location.href);
-        } else {
-          // No saved page, go to login
-          setCurrentPage("login");
-          window.history.replaceState({ page: "login" }, "", window.location.href);
+        // Check if this is first visit in this browser session (using sessionStorage)
+        // This ensures that every time user opens URL (copy-paste, new tab, etc), 
+        // they see landing page first
+        let hasVisitedThisSession = null;
+        try {
+          hasVisitedThisSession = sessionStorage.getItem("hasVisitedThisSession");
+        } catch (e) {
+          console.warn("Session storage not available:", e);
         }
+
+        // Always show landing page on first visit in this session, regardless of auth status
+        if (!hasVisitedThisSession) {
+          // First time access in this session, always show landing page
+          setCurrentPage("landing");
+          try {
+            sessionStorage.setItem("hasVisitedThisSession", "true");
+          } catch (e) {
+            // Ignore session storage error
+          }
+          setIsFirstVisit(true);
+          // Add to browser history
+          window.history.replaceState({ page: "landing" }, "", window.location.href);
+          // Don't save landing page to localStorage on first visit - wait for user interaction
+          setIsInitialized(true);
+          return;
+        }
+
+        // After first visit in this session, check authentication
+        if (authStatus === "true" && role) {
+          // User is authenticated, go to dashboard
+          setIsAuthenticated(true);
+          setUserRole(role as "dokter" | "admin");
+          setCurrentPage("dashboard");
+          window.history.replaceState({ page: "dashboard" }, "", window.location.href);
+        } else {
+          // User is not authenticated
+          // Check if there's a saved page (for refresh persistence)
+          if (savedPage && savedPage !== "dashboard") {
+            // Use saved page (can be landing or login)
+            setCurrentPage(savedPage);
+            window.history.replaceState({ page: savedPage }, "", window.location.href);
+          } else {
+            // No saved page, go to login
+            setCurrentPage("login");
+            window.history.replaceState({ page: "login" }, "", window.location.href);
+          }
+        }
+        setIsInitialized(true);
+      } catch (error) {
+        console.error("Initial check fail:", error);
+        // Fallback if error occurs
+        setCurrentPage("landing");
+        setIsInitialized(true);
       }
-      setIsInitialized(true);
     };
 
     checkAuth();
   }, []);
+
 
   // Save current page to localStorage and browser history whenever it changes
   // This ensures refresh will restore the current page and back button works
@@ -167,7 +186,7 @@ export default function Home() {
         const response = await getAllBilling();
         if (response.data) {
           let billingArray: any[] = [];
-          
+
           if (Array.isArray(response.data)) {
             billingArray = response.data;
           } else if (response.data.data && Array.isArray(response.data.data)) {
@@ -186,11 +205,11 @@ export default function Home() {
             const tindakanRS = Array.isArray(billing.Tindakan_RS || billing.tindakan_rs)
               ? (billing.Tindakan_RS || billing.tindakan_rs).join(", ")
               : (billing.Tindakan_RS || billing.tindakan_rs || "");
-            
+
             const icd9Array = Array.isArray(billing.ICD9 || billing.icd9)
               ? (billing.ICD9 || billing.icd9)
               : (billing.ICD9 || billing.icd9 ? [billing.ICD9 || billing.icd9] : []);
-            
+
             const icd10Array = Array.isArray(billing.ICD10 || billing.icd10)
               ? (billing.ICD10 || billing.icd10)
               : (billing.ICD10 || billing.icd10 ? [billing.ICD10 || billing.icd10] : []);
@@ -287,7 +306,7 @@ export default function Home() {
   // Dokter should go to dokter dashboard
   // Get role from state or localStorage to ensure correct dashboard
   const currentRole = userRole || (typeof window !== "undefined" ? localStorage.getItem("userRole") : null);
-  
+
   // Both admin and dokter go to dokter dashboard
   if (currentRole === "admin") {
     return <DashboardAdmin onLogout={handleLogout} onEditBilling={handleEditBilling} />;

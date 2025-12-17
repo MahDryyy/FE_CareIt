@@ -15,6 +15,7 @@ import {
   type ICD10,
   type TarifData,
   type BillingRequest,
+  getBillingAktifByNama,
 } from '@/lib/api';
 
 const BillingPasien = () => {
@@ -22,7 +23,7 @@ const BillingPasien = () => {
   const [namaPasien, setNamaPasien] = useState('');
   const [idPasien, setIdPasien] = useState('');
   const [usia, setUsia] = useState('');
-  const [gender, setGender] = useState('Pria');
+  const [gender, setGender] = useState('Laki-Laki');
   const [ruangan, setRuangan] = useState('');
   const [kelas, setKelas] = useState('');
   const [tanggalMasuk, setTanggalMasuk] = useState('');
@@ -164,7 +165,7 @@ const BillingPasien = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      
+
       // Check for tindakan dropdown
       if (tindakanDropdownOpen) {
         const isClickInsideInput = tindakanInputRef.current?.contains(target);
@@ -173,7 +174,7 @@ const BillingPasien = () => {
           setTindakanDropdownOpen(false);
         }
       }
-      
+
       // Check for ICD9 dropdown
       if (icd9DropdownOpen) {
         const isClickInsideInput = icd9InputRef.current?.contains(target);
@@ -182,7 +183,7 @@ const BillingPasien = () => {
           setIcd9DropdownOpen(false);
         }
       }
-      
+
       // Check for ICD10 dropdown
       if (icd10DropdownOpen) {
         const isClickInsideInput = icd10InputRef.current?.contains(target);
@@ -191,7 +192,7 @@ const BillingPasien = () => {
           setIcd10DropdownOpen(false);
         }
       }
-      
+
       // Check for Ruangan dropdown
       if (ruanganDropdownOpen) {
         const isClickInsideInput = ruanganInputRef.current?.contains(target);
@@ -200,7 +201,7 @@ const BillingPasien = () => {
           setRuanganDropdownOpen(false);
         }
       }
-      
+
       // Check for DPJP dropdown
       if (dpjpDropdownOpen) {
         const isClickInsideInput = dpjpInputRef.current?.contains(target);
@@ -247,7 +248,7 @@ const BillingPasien = () => {
       setSearchingPasien(true);
       setError('');
       const response = await searchPasien(namaPasien);
-      
+
       if (response.error) {
         setError(response.error);
         setSearchResults([]);
@@ -294,9 +295,9 @@ const BillingPasien = () => {
   // Load riwayat billing aktif untuk pasien
   const loadBillingAktifHistory = async (namaPasien: string) => {
     try {
-      const response = await fetch(`/api/billing/aktif?nama_pasien=${encodeURIComponent(namaPasien)}`);
-      
-      if (response.status === 404) {
+      const res = await getBillingAktifByNama(namaPasien);
+
+      if (res.status === 404) {
         console.log('Tidak ada billing aktif untuk pasien ini');
         setBillingHistory(null);
         setBillingHistoryInfo('Tidak ada riwayat billing aktif untuk pasien ini.');
@@ -304,12 +305,11 @@ const BillingPasien = () => {
         return;
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (res.error) {
+        throw new Error(res.error);
       }
 
-      const data = await response.json();
-      const billingData = data.data || {};
+      const billingData = (res.data?.data || {}) as any;
 
       // Hanya ambil data untuk ditampilkan di tabel, TIDAK auto-fill form
       const tindakan = Array.isArray(billingData.tindakan_rs) ? billingData.tindakan_rs : [];
@@ -396,11 +396,11 @@ const BillingPasien = () => {
     // Map backend gender values to the form's labels
     const jk = (pasien.Jenis_Kelamin || '').toString().toLowerCase();
     if (jk.includes('laki') || jk.includes('pria')) {
-      setGender('Pria');
+      setGender('Laki-Laki');
     } else if (jk.includes('wanita') || jk.includes('perempuan')) {
-      setGender('Wanita');
+      setGender('Perempuan');
     } else {
-      setGender(pasien.Jenis_Kelamin || 'Pria');
+      setGender(pasien.Jenis_Kelamin || 'Laki-Laki');
     }
 
     setRuangan(pasien.Ruangan || '');
@@ -533,10 +533,10 @@ const BillingPasien = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Debug: Log untuk memastikan hanya dipanggil saat tombol Save diklik
     console.log('handleSubmit called - User clicked Save button');
-    
+
     // Prevent multiple submissions
     if (isSubmitting || loading) {
       console.log('Submit blocked - already submitting');
@@ -572,11 +572,14 @@ const BillingPasien = () => {
       const billingData: BillingRequest = {
         nama_dokter: [selectedDokter.Nama_Dokter],
         nama_pasien: namaPasien,
+        id_pasien: idPasien && !isNaN(parseInt(idPasien)) ? parseInt(idPasien) : undefined,
         jenis_kelamin: gender,
         usia: parseInt(usia),
         ruangan: ruangan,
         kelas: kelas,
         tindakan_rs: selectedTindakan,
+        billing_sign: "Hijau", // Back to "Hijau" because backend rejects null/empty
+        tanggal_masuk: tanggalMasuk,
         tanggal_keluar: tanggalKeluar || undefined,
         icd9: selectedICD9,
         icd10: selectedICD10,
@@ -594,7 +597,7 @@ const BillingPasien = () => {
 
       if (response.data) {
         setSuccess('Billing berhasil dibuat!');
-        
+
         // Simpan data ke localStorage untuk INACBG admin page
         const billingResponse = response.data.data?.billing || {};
         const billingDataForINACBG = {
@@ -615,13 +618,15 @@ const BillingPasien = () => {
         };
         localStorage.setItem('currentBillingData', JSON.stringify(billingDataForINACBG));
         console.log('💾 Billing data saved to localStorage:', billingDataForINACBG);
-        
+
         // Reset form setelah berhasil save
         setTimeout(() => {
           setNamaPasien('');
           setIdPasien('');
           setUsia('');
-          setGender('Pria');
+          setIdPasien('');
+          setUsia('');
+          setGender('Laki-Laki');
           setRuangan('');
           setRuanganSearch('');
           setKelas('');
@@ -670,8 +675,8 @@ const BillingPasien = () => {
         </div>
       )}
 
-      <form 
-        onSubmit={handleSubmit} 
+      <form
+        onSubmit={handleSubmit}
         className="w-full"
         onKeyDown={(e) => {
           // Prevent form submission on Enter key unless it's the submit button
@@ -708,26 +713,26 @@ const BillingPasien = () => {
               >
                 <FaSearch />
               </button>
+              {nameDropdownOpen && searchResults.length > 0 && (
+                <div
+                  ref={nameDropdownRef}
+                  className="absolute top-full z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(15rem,calc(100vh-12rem))] overflow-y-auto"
+                  style={{ left: 0 }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {searchResults.map((p) => (
+                    <div
+                      key={p.ID_Pasien}
+                      onClick={() => selectPasien(p)}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
+                    >
+                      <div className="font-medium">{p.Nama_Pasien}</div>
+                      <div className="text-xs text-gray-600">{p.Usia} tahun — {p.Ruangan}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {nameDropdownOpen && searchResults.length > 0 && (
-              <div
-                ref={nameDropdownRef}
-                className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(15rem,calc(100vh-12rem))] overflow-y-auto"
-                style={{ left: 0 }}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                {searchResults.map((p) => (
-                  <div
-                    key={p.ID_Pasien}
-                    onClick={() => selectPasien(p)}
-                    className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-[#2591D0]"
-                  >
-                    <div className="font-medium">{p.Nama_Pasien}</div>
-                    <div className="text-xs text-gray-600">{p.Usia} tahun — {p.Ruangan}</div>
-                  </div>
-                ))}
-              </div>
-            )}
             {searchResults.length > 0 && (
               <div className="mb-2 text-xs text-gray-600">
                 Ditemukan {searchResults.length} pasien. Data otomatis terisi.
@@ -832,7 +837,7 @@ const BillingPasien = () => {
                   className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
                 />
                 {ruanganDropdownOpen && (
-                  <div 
+                  <div
                     ref={ruanganDropdownRef}
                     className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
                     onMouseDown={(e) => e.stopPropagation()}
@@ -948,12 +953,12 @@ const BillingPasien = () => {
                   }
                   setDpjpJustClosed(false);
                 }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && uniqueDPJP.length > 0) {
-                      handleSelectDPJP(uniqueDPJP[0].ID_Dokter.toString(), uniqueDPJP[0].Nama_Dokter);
-                      e.preventDefault();
-                    }
-                  }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && uniqueDPJP.length > 0) {
+                    handleSelectDPJP(uniqueDPJP[0].ID_Dokter.toString(), uniqueDPJP[0].Nama_Dokter);
+                    e.preventDefault();
+                  }
+                }}
                 className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-10 sm:pr-12 text-[#2591D0] placeholder-blue-400 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
                 required
               />
@@ -971,7 +976,7 @@ const BillingPasien = () => {
                 className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
               />
               {dpjpDropdownOpen && (
-                <div 
+                <div
                   ref={dpjpDropdownRef}
                   className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
                   onMouseDown={(e) => e.stopPropagation()}
@@ -1039,7 +1044,7 @@ const BillingPasien = () => {
                     className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
                   />
                   {tindakanDropdownOpen && (
-                    <div 
+                    <div
                       ref={tindakanDropdownRef}
                       className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(20rem,calc(100vh-12rem))] overflow-y-auto"
                       onMouseDown={(e) => e.stopPropagation()}
@@ -1254,7 +1259,7 @@ const BillingPasien = () => {
                     className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
                   />
                   {icd9DropdownOpen && (
-                    <div 
+                    <div
                       ref={icd9DropdownRef}
                       className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
                       onMouseDown={(e) => e.stopPropagation()}
@@ -1351,7 +1356,7 @@ const BillingPasien = () => {
                     className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
                   />
                   {icd10DropdownOpen && (
-                    <div 
+                    <div
                       ref={icd10DropdownRef}
                       className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
                       onMouseDown={(e) => e.stopPropagation()}

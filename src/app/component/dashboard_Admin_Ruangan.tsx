@@ -5,6 +5,9 @@ import { FaSearch, FaExternalLinkAlt, FaEdit } from 'react-icons/fa';
 import RiwayatBillingPasien from "./riwayat-billing-pasien";
 import { getAllBilling } from "@/lib/api";
 
+// Static logo import
+import logoImage from "../../../public/assets/LOGO_CAREIT.svg";
+
 interface DashboardAdminProps {
   onLogout?: () => void;
   onEditBilling?: (billingId: number) => void;
@@ -32,9 +35,9 @@ const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
       try {
         setLoading(true);
         setError("");
-        
+
         const response = await getAllBilling();
-        
+
         if (response.error) {
           setError(response.error);
           setRuanganItems([]);
@@ -43,7 +46,7 @@ const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
 
         // Extract data dari response - bisa response.data atau response.data.data
         const billingArray = response.data?.data || response.data;
-        
+
         if (billingArray && Array.isArray(billingArray)) {
           // Extract unique ruangan dari billing data
           const ruanganSet = new Set<string>();
@@ -146,7 +149,7 @@ const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
         {/* Logo */}
         <div className="p-3 sm:p-5 flex justify-center border-b border-blue-100">
           <Image
-            src="/assets/LOGO_CAREIT.svg"
+            src={logoImage}
             alt="CARE-IT Logo"
             width={140}
             height={70}
@@ -183,10 +186,9 @@ const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
                   className={`
                     w-full flex items-center py-2 sm:py-3 px-2 sm:px-4
                     rounded-lg text-left transition-all
-                    ${
-                      isActive
-                        ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
-                        : "text-gray-400 hover:bg-white hover:text-gray-600"
+                    ${isActive
+                      ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
+                      : "text-gray-400 hover:bg-white hover:text-gray-600"
                     }
                   `}
                 >
@@ -200,9 +202,9 @@ const DashboardAdmin = ({ onLogout, onEditBilling }: DashboardAdminProps) => {
 
       {/* Main Content Area */}
       <div className="flex-1 w-full lg:w-auto lg:ml-0">
-        <RiwayatBillingPasien 
-          onLogout={handleLogout} 
-          userRole="admin" 
+        <RiwayatBillingPasien
+          onLogout={handleLogout}
+          userRole="admin"
           onEdit={onEditBilling}
           selectedRuangan={activeRuangan}
         />

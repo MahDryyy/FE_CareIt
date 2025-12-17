@@ -1,15 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { FaPlus, FaChevronDown, FaSignOutAlt, FaTrash } from "react-icons/fa";
-import {
-  getTarifBPJSRawatInap,
-  getTarifBPJSRawatJalan,
-  postINACBGAdmin,
-  type TarifBPJSRawatInap,
-  type TarifBPJSRawatJalan,
-  type PostINACBGRequest,
-} from "@/lib/api";
+import { FaPlus, FaChevronDown, FaSignOutAlt, FaTrash, FaArrowLeft } from "react-icons/fa";
+import { apiRequest as apiFetch } from "@/lib/api";
+import { useRouter } from "next/navigation";
+
+// Static logo import
+import logoImage from "../../../public/assets/LOGO_CAREIT.svg";
 
 interface INACBGAdminRuanganProps {
   onLogout?: () => void;
@@ -25,11 +22,36 @@ interface INACBGAdminRuanganProps {
   };
 }
 
+interface TarifBPJSRawatInap {
+  KodeINA: string;
+  Deskripsi: string;
+  Kelas1: number;
+  Kelas2: number;
+  Kelas3: number;
+}
+
+interface TarifBPJSRawatJalan {
+  KodeINA: string;
+  Deskripsi: string;
+  TarifINACBG: number;
+  tarif_inacbg?: number;
+}
+
+interface PostINACBGRequest {
+  id_billing: number;
+  tipe_inacbg: string;
+  kode_inacbg: string[];
+  total_klaim: number;
+  billing_sign: string;
+  tanggal_keluar: string;
+}
+
 const INACBG_Admin_Ruangan = ({
   onLogout,
   billingId,
   pasienData,
 }: INACBGAdminRuanganProps) => {
+  const router = useRouter();
   const [activeRuangan, setActiveRuangan] = useState("Ruangan 1");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -42,9 +64,13 @@ const INACBG_Admin_Ruangan = ({
   const [icd9, setIcd9] = useState("");
   const [icd10, setIcd10] = useState("");
   const [selectedInacbgCodes, setSelectedInacbgCodes] = useState<string[]>([]);
+  // Kode yang sudah tersimpan sebelumnya di DB (baseline), dipakai agar total klaim tidak double-count
+  const [existingInacbgCodes, setExistingInacbgCodes] = useState<string[]>([]);
   const [totalKlaimBPJS, setTotalKlaimBPJS] = useState(0);
   const [totalKlaimOriginal, setTotalKlaimOriginal] = useState<number>(0); // Original from database
   const [tipeInacbg, setTipeInacbg] = useState<"RI" | "RJ">("RI");
+  // Live indicator should not default to Hijau/Merah before we have enough data to compute it.
+  const [liveBillingSign, setLiveBillingSign] = useState<string>("");
 
   // Dropdown state
   const [inacbgRIData, setInacbgRIData] = useState<TarifBPJSRawatInap[]>([]);
@@ -85,7 +111,7 @@ const INACBG_Admin_Ruangan = ({
           setTindakan(Array.isArray(pasienData.tindakan) ? pasienData.tindakan.join(', ') : (pasienData.tindakan || ""));
           setIcd9(Array.isArray(pasienData.icd9) ? pasienData.icd9.join(', ') : (pasienData.icd9 || ""));
           setIcd10(Array.isArray(pasienData.icd10) ? pasienData.icd10.join(', ') : (pasienData.icd10 || ""));
-          
+
           // Save to localStorage for future reference
           const billingData = {
             nama_pasien: pasienData.nama,
@@ -106,20 +132,20 @@ const INACBG_Admin_Ruangan = ({
         if (storedData) {
           const billingData = JSON.parse(storedData);
           console.log('📦 Patient data loaded from localStorage:', billingData);
-          
+
           setNamaLengkap(billingData.nama_pasien || "");
           setIdPasien(billingData.id_pasien || "");
           setKelas(billingData.kelas || "");
           setTotalTarifRS(billingData.total_tarif_rs || 0);
-          
+
           if (billingData.tindakan && Array.isArray(billingData.tindakan) && billingData.tindakan.length > 0) {
             setTindakan(billingData.tindakan.join(', '));
           }
-          
+
           if (billingData.icd9 && Array.isArray(billingData.icd9) && billingData.icd9.length > 0) {
             setIcd9(billingData.icd9.join(', '));
           }
-          
+
           if (billingData.icd10 && Array.isArray(billingData.icd10) && billingData.icd10.length > 0) {
             setIcd10(billingData.icd10.join(', '));
           }
@@ -130,16 +156,16 @@ const INACBG_Admin_Ruangan = ({
         if (billingId) {
           console.log('📡 Fetching patient data from API with billingId:', billingId);
           try {
-            const response = await fetch(`/api/admin/billing/${billingId}`);
-            if (response.ok) {
-              const data = await response.json();
+            const response = await apiFetch<any>(`/admin/billing/${billingId}`);
+            if (!response.error && response.data) {
+              const data = response.data;
               console.log('📥 Billing data from API:', data);
-              
+
               setNamaLengkap(data.nama_pasien || data.patient_name || "");
               setIdPasien(data.id_pasien || data.patient_id || "");
               setKelas(data.kelas || "");
               setTotalTarifRS(data.total_tarif_rs || 0);
-              
+
               if (data.tindakan) {
                 if (Array.isArray(data.tindakan)) {
                   setTindakan(data.tindakan.join(', '));
@@ -147,7 +173,7 @@ const INACBG_Admin_Ruangan = ({
                   setTindakan(data.tindakan);
                 }
               }
-              
+
               if (data.icd9) {
                 if (Array.isArray(data.icd9)) {
                   setIcd9(data.icd9.join(', '));
@@ -155,7 +181,7 @@ const INACBG_Admin_Ruangan = ({
                   setIcd9(data.icd9);
                 }
               }
-              
+
               if (data.icd10) {
                 if (Array.isArray(data.icd10)) {
                   setIcd10(data.icd10.join(', '));
@@ -163,7 +189,7 @@ const INACBG_Admin_Ruangan = ({
                   setIcd10(data.icd10);
                 }
               }
-              
+
               // Store to localStorage
               localStorage.setItem('currentBillingData', JSON.stringify(data));
               console.log('💾 Patient data saved to localStorage from API');
@@ -185,25 +211,24 @@ const INACBG_Admin_Ruangan = ({
   // Re-calculate totalKlaimBPJS saat selected codes atau INACBG data berubah
   // Single source of truth untuk perhitungan total klaim (menghindari konflik dengan manual add/remove)
   useEffect(() => {
-    // Jika tidak ada kode yang dipilih, set total ke 0
-    if (selectedInacbgCodes.length === 0) {
-      setTotalKlaimBPJS(0);
-      console.log(`💰 Total Klaim reset to 0 (no codes selected)`);
-      return;
-    }
-
     // Pastikan data INACBG sudah dimuat
     if (inacbgRIData.length === 0 && inacbgRJData.length === 0) {
       return; // Tunggu data dimuat dulu
     }
 
-    let totalKlaim = 0;
-    
-    // Extract class number from kelas string (\"Kelas 1\" -> 1, \"Kelas 3\" -> 3)
+    // Base klaim = yang sudah ada di DB (kalau belum ada, base = 0)
+    const baseKlaim = totalKlaimOriginal || 0;
+
+    // Untuk case "tambah INACBG baru": tampilkan base + tarif kode yang BARU (yang belum ada di DB)
+    const newCodes = selectedInacbgCodes.filter((c) => !existingInacbgCodes.includes(c));
+
+    let tambahanKlaim = 0;
+
+    // Extract class number from kelas string ("Kelas 1" -> 1, "Kelas 3" -> 3)
     const kelasMatch = kelas.match(/(\d+)/);
     const kelasNumber = kelasMatch ? parseInt(kelasMatch[1]) : 1;
-    
-    selectedInacbgCodes.forEach((code) => {
+
+    newCodes.forEach((code) => {
       let tarif = 0;
       if (tipeInacbg === 'RI') {
         const riItem = inacbgRIData.find((item) => item.KodeINA === code);
@@ -217,21 +242,50 @@ const INACBG_Admin_Ruangan = ({
         const rjItem = inacbgRJData.find((item) => item.KodeINA === code);
         tarif = rjItem?.TarifINACBG || rjItem?.tarif_inacbg || 0;
       }
-      totalKlaim += tarif;
+      // Potong 25% per item (klaim efektif)
+      tambahanKlaim += tarif * 0.75;
     });
-    
-    setTotalKlaimBPJS(totalKlaim);
-    console.log(`💰 Total Klaim calculated for Kelas ${kelasNumber}: ${totalKlaim} (${selectedInacbgCodes.length} codes)`);
-  }, [selectedInacbgCodes, inacbgRIData, inacbgRJData, tipeInacbg, kelas]);
+
+    const finalTotal = baseKlaim + tambahanKlaim;
+    setTotalKlaimBPJS(finalTotal);
+
+    console.log(
+      `💰 Total Klaim Efektif(base + new): base = ${baseKlaim}, tambahan = ${tambahanKlaim}, total = ${finalTotal} (newCodes = ${newCodes.length}, selected = ${selectedInacbgCodes.length})`
+    );
+  }, [
+    selectedInacbgCodes,
+    existingInacbgCodes,
+    inacbgRIData,
+    inacbgRJData,
+    tipeInacbg,
+    kelas,
+    totalKlaimOriginal,
+  ]);
+
+  // LIVE Billing Sign Calculation
+  // Dipisah dari useEffect di atas agar tetap berjalan meskipun selectedInacbgCodes kosong (misal saat load dari DB)
+  useEffect(() => {
+    // Guard: only compute when we actually have numbers to compare
+    if (!totalTarifRS || totalTarifRS <= 0 || !totalKlaimBPJS || totalKlaimBPJS <= 0) {
+      if (liveBillingSign !== "") setLiveBillingSign("");
+      return;
+    }
+
+    const sign = calculateBillingSign(totalTarifRS, totalKlaimBPJS);
+    if (sign !== liveBillingSign) {
+      setLiveBillingSign(sign);
+      console.log(`🎨 Live Billing Sign updated to: ${sign} (Tarif: ${totalTarifRS}, Klaim: ${totalKlaimBPJS})`);
+    }
+  }, [totalTarifRS, totalKlaimBPJS, liveBillingSign]);
 
   // Load ruangan dengan pasien dan INACBG data, juga billing original data
   useEffect(() => {
     const loadData = async () => {
       try {
         // Fetch ruangan yang punya pasien
-        const ruanganResponse = await fetch("/api/admin/ruangan-dengan-pasien");
-        const ruanganData = await ruanganResponse.json();
-        
+        const ruanganRes = await apiFetch<any[]>("/admin/ruangan-dengan-pasien");
+        const ruanganData = ruanganRes.data || [];
+
         if (ruanganData && Array.isArray(ruanganData)) {
           const namaRuangan = ruanganData.map((r: any) => r.Nama_Ruangan || r.nama_ruangan);
           setRuanganItems(namaRuangan.length > 0 ? namaRuangan : ["Tidak ada ruangan"]);
@@ -242,8 +296,8 @@ const INACBG_Admin_Ruangan = ({
 
         // Fetch INACBG data
         const [riResponse, rjResponse] = await Promise.all([
-          getTarifBPJSRawatInap(),
-          getTarifBPJSRawatJalan(),
+          apiFetch<TarifBPJSRawatInap[]>("/tarifBPJSRawatInap"),
+          apiFetch<TarifBPJSRawatJalan[]>("/tarifBPJSRawatJalan"),
         ]);
 
         if (riResponse.data) {
@@ -257,13 +311,54 @@ const INACBG_Admin_Ruangan = ({
         if (billingId) {
           try {
             // Fetch billing detail
-            const response = await fetch(`/api/admin/billing/${billingId}`);
-            if (response.ok) {
-              const data = await response.json();
+            const res = await apiFetch<any>(`/admin/billing/${billingId}`);
+            if (!res.error && res.data) {
+              const data = res.data;
               console.log("📊 Billing data from API:", data);
+
               if (data.total_klaim) {
                 setTotalKlaimOriginal(data.total_klaim);
-                console.log(`💰 Set totalKlaimOriginal: ${data.total_klaim}`);
+                // Set totalKlaimBPJS juga supaya muncul di input
+                setTotalKlaimBPJS(data.total_klaim);
+                console.log(`💰 Set totalKlaimOriginal & totalKlaimBPJS: ${data.total_klaim} `);
+              }
+
+              // Load Tipe INACBG
+              if (data.tipe_inacbg) {
+                setTipeInacbg(data.tipe_inacbg as "RI" | "RJ");
+                console.log(`🏥 Set tipeInacbg: ${data.tipe_inacbg} `);
+              }
+
+              // Jika DB belum punya kode_inacbg tapi sudah punya total_klaim,
+              // jadikan baseline total_klaim sebagai base (existing codes dianggap kosong)
+              if ((!data.kode_inacbg || (Array.isArray(data.kode_inacbg) && data.kode_inacbg.length === 0)) && data.total_klaim) {
+                setExistingInacbgCodes([]);
+              }
+
+              // Load Saved INACBG Codes
+              let loadedCodes: string[] = [];
+              if (data.kode_inacbg) {
+                if (Array.isArray(data.kode_inacbg)) {
+                  loadedCodes = data.kode_inacbg;
+                } else if (typeof data.kode_inacbg === 'string') {
+                  // Handle stored as string/JSON
+                  try {
+                    // Try parsing as JSON array
+                    const parsed = JSON.parse(data.kode_inacbg);
+                    if (Array.isArray(parsed)) loadedCodes = parsed;
+                    else loadedCodes = [data.kode_inacbg];
+                  } catch (e) {
+                    // Split by comma if not JSON
+                    loadedCodes = data.kode_inacbg.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '');
+                  }
+                }
+
+                if (loadedCodes.length > 0) {
+                  // baseline codes (sudah ada di DB) untuk perhitungan base + new
+                  setExistingInacbgCodes(loadedCodes);
+                  setSelectedInacbgCodes(loadedCodes);
+                  console.log(`📝 Loaded selectedInacbgCodes: `, loadedCodes);
+                }
               }
             }
 
@@ -331,9 +426,8 @@ const INACBG_Admin_Ruangan = ({
       "Desember",
     ];
     const today = new Date();
-    return `${days[today.getDay()]}, ${today.getDate()} ${
-      months[today.getMonth()]
-    } ${today.getFullYear()}`;
+    return `${days[today.getDay()]}, ${today.getDate()} ${months[today.getMonth()]
+      } ${today.getFullYear()} `;
   };
 
   // Load billing aktif history untuk ditampilkan (ICD9, ICD10, INACBG)
@@ -346,26 +440,39 @@ const INACBG_Admin_Ruangan = ({
         return;
       }
 
-      const response = await fetch(`/api/billing/aktif?nama_pasien=${encodeURIComponent(namaPasienParam)}`);
-      
-      if (response.status === 404) {
+      const res = await apiFetch<{ data: any }>(
+        `/billing/aktif?nama_pasien=${encodeURIComponent(namaPasienParam)}`
+      );
+
+      if (res.status === 404) {
         console.log('Tidak ada billing aktif untuk pasien ini');
         setBillingHistory({ icd9: [], icd10: [], inacbg: [] });
         setBillingHistoryInfo('Tidak ada riwayat billing aktif untuk pasien ini.');
         return;
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (res.error) {
+        throw new Error(res.error);
       }
 
-      const data = await response.json();
-      const billingData = data.data || {};
+      const billingData = (res.data?.data || {}) as any;
+
+      // UPDATE: Ambil total_klaim dari billing aktif jika ada dan belum ter-set
+      if (billingData.billing && billingData.billing.total_klaim) {
+        const klaimAktif = billingData.billing.total_klaim;
+        console.log(`💰 Found total_klaim in active billing history: ${klaimAktif} `);
+
+        if (totalKlaimOriginal === 0 || totalKlaimBPJS === 0) {
+          setTotalKlaimOriginal(klaimAktif);
+          setTotalKlaimBPJS(klaimAktif);
+          console.log('✅ Updated totalKlaimBPJS from active billing history');
+        }
+      }
 
       // Ambil ICD9, ICD10, dan INACBG
       const icd9 = Array.isArray(billingData.icd9) ? billingData.icd9 : [];
       const icd10 = Array.isArray(billingData.icd10) ? billingData.icd10 : [];
-      
+
       // Gabungkan INACBG RI dan RJ
       const inacbgRI = Array.isArray(billingData.inacbg_ri) ? billingData.inacbg_ri : [];
       const inacbgRJ = Array.isArray(billingData.inacbg_rj) ? billingData.inacbg_rj : [];
@@ -373,7 +480,7 @@ const INACBG_Admin_Ruangan = ({
 
       // Selalu set billing history, meskipun semua array kosong (untuk menampilkan tabel kosong)
       setBillingHistory({ icd9, icd10, inacbg });
-      
+
       if (icd9.length > 0 || icd10.length > 0 || inacbg.length > 0) {
         setBillingHistoryInfo('Riwayat billing aktif berhasil dimuat.');
       } else {
@@ -393,27 +500,27 @@ const INACBG_Admin_Ruangan = ({
     // Extract class number from kelas string (\"Kelas 1\" -> 1, \"Kelas 3\" -> 3)
     const kelasMatch = kelas.match(/(\d+)/);
     const kelasNumber = kelasMatch ? parseInt(kelasMatch[1]) : 1;
-    
+
     const data =
       tipeInacbg === "RI"
         ? inacbgRIData.map((item) => {
-            // Select tarif based on kelas
-            let tarifValue = item.Kelas1;
-            if (kelasNumber === 1) tarifValue = item.Kelas1;
-            else if (kelasNumber === 2) tarifValue = item.Kelas2;
-            else if (kelasNumber === 3) tarifValue = item.Kelas3;
-            
-            return {
-              code: item.KodeINA,
-              description: item.Deskripsi,
-              tarif: tarifValue,
-            };
-          })
-        : inacbgRJData.map((item) => ({
+          // Select tarif based on kelas
+          let tarifValue = item.Kelas1;
+          if (kelasNumber === 1) tarifValue = item.Kelas1;
+          else if (kelasNumber === 2) tarifValue = item.Kelas2;
+          else if (kelasNumber === 3) tarifValue = item.Kelas3;
+
+          return {
             code: item.KodeINA,
             description: item.Deskripsi,
-            tarif: item.TarifINACBG || item.tarif_inacbg || 0,
-          }));
+            tarif: tarifValue,
+          };
+        })
+        : inacbgRJData.map((item) => ({
+          code: item.KodeINA,
+          description: item.Deskripsi,
+          tarif: item.TarifINACBG || item.tarif_inacbg || 0,
+        }));
 
     if (!inacbgSearch) return data;
 
@@ -424,11 +531,33 @@ const INACBG_Admin_Ruangan = ({
     );
   };
 
+  // Lookup tarif INACBG "mentah" (belum dipotong 25%) untuk ditampilkan di tabel riwayat.
+  // RI: gunakan kelas (1/2/3), RJ: gunakan TarifINACBG.
+  const getInacbgTarifRaw = (code: string): number | null => {
+    if (!code) return null;
+
+    const kelasMatch = kelas.match(/(\d+)/);
+    const kelasNumber = kelasMatch ? parseInt(kelasMatch[1]) : 1;
+
+    const riItem = inacbgRIData.find((item) => item.KodeINA === code);
+    if (riItem) {
+      if (kelasNumber === 1) return riItem.Kelas1 || 0;
+      if (kelasNumber === 2) return riItem.Kelas2 || 0;
+      if (kelasNumber === 3) return riItem.Kelas3 || 0;
+      return riItem.Kelas1 || 0;
+    }
+
+    const rjItem = inacbgRJData.find((item) => item.KodeINA === code);
+    if (rjItem) return rjItem.TarifINACBG || rjItem.tarif_inacbg || 0;
+
+    return null;
+  };
+
   // Add INACBG code - mirip dengan handleAddICD9/ICD10
   // Total klaim akan dihitung ulang otomatis oleh useEffect (single source of truth)
   const handleAddInacbg = (code?: string) => {
     const codeToAdd = code || selectedInacbgCode;
-    
+
     if (!codeToAdd) {
       // Jika ada filtered codes, ambil yang pertama
       const filtered = filteredInacbgCodes();
@@ -467,23 +596,20 @@ const INACBG_Admin_Ruangan = ({
 
   // Calculate billing sign based on percentage
   // Mapping to database ENUM('Hijau','Kuning','Merah')
-  // Rumus: Klaim BPJS dikurangi 25% dulu, baru dibandingkan dengan Tarif RS
+  // Rumus (klaim efektif per item): tarif INACBG sudah dipotong 25% per item saat dihitung ke totalKlaimBPJS.
+  // Jadi di sini kita membandingkan Tarif RS vs totalKlaimBPJS (yang sudah efektif), TANPA potong 25% lagi.
   const calculateBillingSign = (totalTarifRS: number, totalKlaimBPJS: number): string => {
-    console.log(`🔍 calculateBillingSign called: totalTarifRS=${totalTarifRS}, totalKlaimBPJS=${totalKlaimBPJS}`);
-    
+    console.log(`🔍 calculateBillingSign called: totalTarifRS = ${totalTarifRS}, totalKlaimBPJS = ${totalKlaimBPJS} `);
+
     if (!totalKlaimBPJS || totalKlaimBPJS === 0) {
       console.warn("⚠️ totalKlaimBPJS is 0 or empty, returning 'Hijau'");
       return "Hijau";
     }
-    
-    // Kurangi 25% dari klaim BPJS dulu (untuk alokasi obat/potongan)
-    const klaimBPJSEfektif = totalKlaimBPJS * 0.75;
-    console.log(`💰 Klaim BPJS Efektif (setelah dikurangi 25%): ${klaimBPJSEfektif.toFixed(2)}`);
-    
-    // Hitung persentase: (Total_Tarif_RS / Klaim_BPJS_Efektif) × 100%
-    const percentage = (totalTarifRS / klaimBPJSEfektif) * 100;
-    console.log(`📊 Percentage: ${percentage.toFixed(2)}%`);
-    
+
+    // Hitung persentase: (Total_Tarif_RS / Total_Klaim_BPJS_Efektif) × 100%
+    const percentage = (totalTarifRS / totalKlaimBPJS) * 100;
+    console.log(`📊 Percentage: ${percentage.toFixed(2)}% `);
+
     if (percentage <= 25) {
       console.log("✅ Returning: Hijau (<=25%)");
       return "Hijau"; // Tarif RS <=25% dari Klaim BPJS Efektif = AMAN
@@ -513,26 +639,30 @@ const INACBG_Admin_Ruangan = ({
     setSuccess("");
 
     try {
-      // Calculate billing_sign based on tariff comparison
-      // Use original total_klaim from database, not accumulated INACBG tarif
+      // Calculate billing_sign based on tariff comparison (klaim efektif per item)
+      // totalKlaimBPJS di UI sudah berupa base + tambahan (dengan potong 25% per item untuk tambahan)
       const totalTarifRSValue = totalTarifRS || 0;
-      const totalKlaimValue = totalKlaimOriginal || totalKlaimBPJS || 0; // Prefer original from DB
-      
-      console.log(`💰 Data for billing_sign calculation:`);
-      console.log(`   - totalTarifRS: ${totalTarifRSValue}`);
-      console.log(`   - totalKlaimOriginal from DB: ${totalKlaimOriginal}`);
-      console.log(`   - totalKlaimBPJS accumulated: ${totalKlaimBPJS}`);
-      console.log(`   - Using for calculation: ${totalKlaimValue}`);
-      
-      const billingSignColor = calculateBillingSign(totalTarifRSValue, totalKlaimValue);
-      
-      console.log(`📋 Final billing_sign value: ${billingSignColor}`);
+      const totalKlaimFinal = totalKlaimBPJS || 0;
+
+      console.log(`💰 Data for billing_sign calculation: `);
+      console.log(`   - totalTarifRS: ${totalTarifRSValue} `);
+      console.log(`   - totalKlaimOriginal from DB(baseline): ${totalKlaimOriginal} `);
+      console.log(`   - totalKlaimBPJS(base + new, effective): ${totalKlaimBPJS} `);
+      console.log(`   - Using for calculation: ${totalKlaimFinal} `);
+
+      const billingSignColor = calculateBillingSign(totalTarifRSValue, totalKlaimFinal);
+
+      console.log(`📋 Final billing_sign value: ${billingSignColor} `);
+
+      // Backend menambahkan input.total_klaim ke Total_Klaim yang sudah ada.
+      // Jadi kita kirim DELTA (tambahan klaim efektif) untuk kode yang baru ditambahkan.
+      const deltaKlaim = Math.max(0, totalKlaimBPJS - (totalKlaimOriginal || 0));
 
       const payload: PostINACBGRequest = {
         id_billing: billingId,
         tipe_inacbg: tipeInacbg,
         kode_inacbg: selectedInacbgCodes,
-        total_klaim: totalKlaimBPJS,
+        total_klaim: deltaKlaim,
         billing_sign: billingSignColor,
         tanggal_keluar: new Date().toISOString().split("T")[0],
       };
@@ -554,7 +684,10 @@ const INACBG_Admin_Ruangan = ({
         }
       }
 
-      const response = await postINACBGAdmin(payload);
+      const response = await apiFetch<{ status: string; message: string }>("/admin/inacbg", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
       console.log("📥 Response from backend:", response);
 
@@ -565,10 +698,8 @@ const INACBG_Admin_Ruangan = ({
 
       setSuccess("Data INA CBG berhasil disimpan");
       setTimeout(() => {
-        // Navigate back to dashboard
-        if (typeof window !== "undefined") {
-          window.location.href = "/";
-        }
+        // Navigate back to dashboard using router to avoid white screen
+        window.location.reload();
       }, 2000);
     } catch (err) {
       setError(
@@ -634,20 +765,20 @@ const INACBG_Admin_Ruangan = ({
       {/* Left Sidebar */}
       <div
         className={`
-          fixed top-0 left-0
-          w-56 sm:w-64 h-screen
-          bg-[#ECF6FB] rounded-r-2xl sm:rounded-r-3xl shadow-lg
-          transition-transform duration-300 z-50
-          overflow-y-auto
+          fixed top - 0 left - 0
+w - 56 sm: w - 64 h - screen
+bg - [#ECF6FB] rounded - r - 2xl sm: rounded - r - 3xl shadow - lg
+transition - transform duration - 300 z - 50
+overflow - y - auto
 
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:translate-x-0 lg:relative lg:rounded-r-none lg:rounded-l-3xl
-        `}
+lg: translate - x - 0 lg:relative lg: rounded - r - none lg: rounded - l - 3xl
+  `}
       >
         {/* Logo */}
         <div className="p-3 sm:p-5 flex justify-center border-b border-blue-100">
           <Image
-            src="/assets/LOGO_CAREIT.svg"
+            src={logoImage}
             alt="CARE-IT Logo"
             width={140}
             height={70}
@@ -668,14 +799,13 @@ const INACBG_Admin_Ruangan = ({
                   setIsSidebarOpen(false);
                 }}
                 className={`
-                  w-full flex items-center py-2 sm:py-3 px-2 sm:px-4
-                  rounded-lg text-left transition-all
-                  ${
-                    isActive
-                      ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
-                      : "text-gray-400 hover:bg-white hover:text-gray-600"
+w - full flex items - center py - 2 sm: py - 3 px - 2 sm: px - 4
+rounded - lg text - left transition - all
+                  ${isActive
+                    ? "bg-white text-[#2591D0] border-l-4 border-[#2591D0] font-medium"
+                    : "text-gray-400 hover:bg-white hover:text-gray-600"
                   }
-                `}
+`}
               >
                 <span className="text-xs sm:text-sm">{ruangan}</span>
               </button>
@@ -687,7 +817,14 @@ const INACBG_Admin_Ruangan = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:ml-0">
         {/* Top Bar */}
-        <div className="bg-white shadow-sm px-4 sm:px-6 py-3 sm:py-4 flex justify-end items-center">
+        <div className="bg-white shadow-sm px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center text-[#2591D0] hover:text-[#1e7ba8] transition-colors gap-2"
+          >
+            <FaArrowLeft className="w-5 h-5" />
+            <span className="font-semibold hidden sm:inline">Kembali</span>
+          </button>
           <div className="flex items-center gap-4">
             <div className="text-[#2591D0] font-semibold text-sm sm:text-base">
               {getCurrentDate()}
@@ -823,7 +960,7 @@ const INACBG_Admin_Ruangan = ({
             <div className="ml-0 sm:ml-4 mt-4 sm:mt-6 mb-4 sm:mb-6 w-full max-w-full">
               <label className="block text-sm sm:text-md text-[#2591D0] mb-2 sm:mb-3 font-bold">Riwayat Billing Aktif (ICD9, ICD10, INACBG)</label>
               <div className="text-xs sm:text-sm text-blue-600 mb-3">{billingHistoryInfo}</div>
-              
+
               {/* Desktop Table View */}
               {billingHistory && (
                 <div className="hidden md:block overflow-x-auto border border-blue-200 rounded-lg">
@@ -840,7 +977,7 @@ const INACBG_Admin_Ruangan = ({
                         Array.from({
                           length: Math.max(billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg.length)
                         }).map((_, idx) => (
-                          <tr key={`history-row-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50'}>
+                          <tr key={`history - row - ${idx} `} className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50'}>
                             <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
                               {billingHistory.icd9[idx] || '-'}
                             </td>
@@ -848,7 +985,14 @@ const INACBG_Admin_Ruangan = ({
                               {billingHistory.icd10[idx] || '-'}
                             </td>
                             <td className="border border-blue-200 p-3 md:p-4 text-[#2591D0] break-words">
-                              {billingHistory.inacbg[idx] || '-'}
+                              {(() => {
+                                const code = billingHistory.inacbg[idx] || '';
+                                if (!code) return '-';
+                                const tarif = getInacbgTarifRaw(code);
+                                return tarif === null
+                                  ? code
+                                  : `${code} — Rp ${Number(tarif).toLocaleString('id-ID')} `;
+                              })()}
                             </td>
                           </tr>
                         ))
@@ -872,7 +1016,7 @@ const INACBG_Admin_Ruangan = ({
                       length: Math.max(billingHistory.icd9.length, billingHistory.icd10.length, billingHistory.inacbg.length)
                     }).map((_, idx) => (
                       <div
-                        key={`history-card-${idx}`}
+                        key={`history - card - ${idx} `}
                         className="bg-white border border-blue-200 rounded-lg shadow-sm p-3 sm:p-4 hover:shadow-md transition-shadow"
                       >
                         <div className="space-y-2">
@@ -897,7 +1041,14 @@ const INACBG_Admin_Ruangan = ({
                               INACBG
                             </span>
                             <span className="text-sm text-[#2591D0] break-words">
-                              {billingHistory.inacbg[idx] || '-'}
+                              {(() => {
+                                const code = billingHistory.inacbg[idx] || '';
+                                if (!code) return '-';
+                                const tarif = getInacbgTarifRaw(code);
+                                return tarif === null
+                                  ? code
+                                  : `${code} — Rp ${Number(tarif).toLocaleString('id-ID')} `;
+                              })()}
                             </span>
                           </div>
                         </div>
@@ -978,7 +1129,7 @@ const INACBG_Admin_Ruangan = ({
                     className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-blue-400 cursor-pointer hover:text-blue-600 text-sm sm:text-base pointer-events-auto z-10"
                   />
                   {inacbgDropdownOpen && (
-                    <div 
+                    <div
                       ref={inacbgDropdownRef}
                       className="absolute z-50 w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto"
                       onMouseDown={(e) => e.stopPropagation()}
@@ -1017,17 +1168,17 @@ const INACBG_Admin_Ruangan = ({
               {selectedInacbgCodes.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {selectedInacbgCodes.map((code) => {
-                    const codeData = filteredInacbgCodes().find(
-                      (item) => item.code === code
-                    );
+                    const tarif = getInacbgTarifRaw(code);
                     return (
                       <div key={code} className="flex items-center bg-blue-50 border border-blue-200 text-[#2591D0] rounded-full px-3 py-1 text-sm">
-                        <span className="mr-2">{code}</span>
+                        <span className="mr-2">
+                          {code} {tarif !== null ? `- Rp ${Number(tarif).toLocaleString('id-ID')} ` : ''}
+                        </span>
                         <button
                           type="button"
                           onClick={() => handleRemoveInacbg(code)}
                           className="text-red-500 hover:text-red-700 ml-1"
-                          aria-label={`Hapus INACBG ${code}`}
+                          aria-label={`Hapus INACBG ${code} `}
                         >
                           <FaTrash />
                         </button>
@@ -1049,6 +1200,28 @@ const INACBG_Admin_Ruangan = ({
                 readOnly
                 className="w-full border text-sm border-blue-200 rounded-full py-2 sm:py-3 pl-3 sm:pl-4 pr-8 sm:pr-10 text-[#2591D0] bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-0"
               />
+            </div>
+
+            {/* Billing Sign Indicator */}
+            <div className="ml-0 sm:ml-4 mt-2 mb-3 sm:mb-4">
+              <label className="block text-sm sm:text-md text-[#2591D0] mb-1 sm:mb-2 font-bold">
+                Status Klaim (Live)
+              </label>
+              <div
+                className={`w - full py - 3 px - 4 rounded - lg font - bold text - center border transition - colors ${liveBillingSign === ""
+                  ? "bg-gray-50 text-gray-600 border-gray-200"
+                  : liveBillingSign === "Hijau"
+                    ? "bg-green-100 text-green-700 border-green-300"
+                    : liveBillingSign === "Kuning"
+                      ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                      : "bg-red-100 text-red-700 border-red-300"
+                  } `}
+              >
+                {liveBillingSign === "" && "Belum bisa dihitung (isi data klaim & tarif dulu)"}
+                {liveBillingSign === "Hijau" && "Hijau - AMAN (<= 25%)"}
+                {liveBillingSign === "Kuning" && "Kuning - PERHATIAN (26% - 50%)"}
+                {liveBillingSign === "Merah" && "Merah - WASPADA (> 50%)"}
+              </div>
             </div>
 
             {/* Save Button */}
